@@ -1,0 +1,23 @@
+# Node modules
+node_modules/
+bun.lockb
+bun.lock
+bun.lockb
+# Bun cache
+.bun/
+# Dist and build outputs
+dist/
+build/
+# Logs
+*.log
+# Environment variables
+.env
+.env.*
+# IDE
+.vscode/
+.idea/
+*.swp
+*~
+# OS
+.DS_Store
+Thumbs.db
