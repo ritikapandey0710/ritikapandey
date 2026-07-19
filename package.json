@@ -2,17 +2,13 @@
   "name": "help-desk-ticket-system",
   "version": "0.1.0",
   "private": true,
-  "workspaces": [
-    "server",
-    "client"
-  ],
+  "workspaces": ["server", "client"],
   "scripts": {
-    "dev": "concurrently \"bun run --workspace server dev\" \"bun run --workspace client dev\"",
-    "build": "bun run workspace run build",
-    "start": "bun run workspace server start"
+    "dev": "concurrently \"bun run --cwd server dev\" \"bun run --cwd client dev\"",
+    "dev:server": "bun run --cwd server dev",
+    "dev:client": "bun run --cwd client dev"
   },
   "devDependencies": {
-    "concurrency": "^0.1.2",
     "concurrently": "^8.2.2"
   }
 }

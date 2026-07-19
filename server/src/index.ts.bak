@@ -10,11 +10,6 @@ const port = process.env.PORT || 3000;
 
 app.use(cors({ origin: "http://localhost:5173", credentials: true }));
 
-// Test route
-app.get("/api/test", (req, res) => {
-  res.send("test ok");
-});
-
 // Better Auth — must be before json middleware
 app.all("/api/auth/*", toNodeHandler(auth));
 
