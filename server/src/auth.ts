@@ -2,15 +2,19 @@ import { prisma } from "./prisma";
 import { prismaAdapter } from "@better-auth/prisma-adapter";
 import { betterAuth } from "better-auth";
 
+console.log("Loading auth module...");
+
 export const auth = betterAuth({
-  baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
+  baseURL: "http://localhost:3001",
   database: prismaAdapter(prisma, {
     provider: "postgresql",
   }),
   emailAndPassword: {
     enableSignIn: true,
-    enableSignUp: false,
+    enableSignUp: true,
   },
   trustedOrigins: ["http://localhost:5173"],
   secret: process.env.AUTH_SECRET,
 });
+
+console.log("Auth module loaded");

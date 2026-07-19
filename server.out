@@ -1,1 +1,9 @@
+Loading auth module...
+Auth module loaded
 Server running at http://localhost:3001
+[2026-07-19T08:43:31.156Z] POST /api/auth/email/sign-up
+[2026-07-19T08:44:10.513Z] POST /api/auth/email/sign-in
+[2026-07-19T08:45:12.187Z] GET /api/health
+[POST-AUTH] GET /api/health - 200
+[2026-07-19T08:45:15.835Z] POST /api/auth/email/sign-in
+[2026-07-19T08:45:17.844Z] POST /api/auth/email/sign-in

@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "bun run --watch src/index.ts",
-    "start": "bun run src/index.ts"
+
+    "start": "bun run src/index.ts",
+    "seed": "bun run seed.ts"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
