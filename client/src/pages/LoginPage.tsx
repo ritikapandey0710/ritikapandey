@@ -3,9 +3,10 @@ import { authClient } from "../lib/auth-client";
 import { useNavigate, useLocation } from "react-router-dom";
 
 export default function LoginPage() {
+  const { useSession } = authClient;
+  const { data: session, isPending } = useSession();
   const navigate = useNavigate();
   const location = useLocation();
-  const { data: session, isPending } = authClient.useSession();
 
   const [view, setView] = useState(location.pathname === "/signup" ? "signup" : "login");
   const [name, setName] = useState("");

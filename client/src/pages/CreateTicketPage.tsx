@@ -4,8 +4,9 @@ import { useNavigate } from "react-router-dom";
 import { createTicket } from "../api";
 
 export default function CreateTicketPage() {
+  const { useSession } = authClient;
+  const { data: session, isPending } = useSession();
   const navigate = useNavigate();
-  const { data: session, isPending } = authClient.useSession();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState("OPEN");

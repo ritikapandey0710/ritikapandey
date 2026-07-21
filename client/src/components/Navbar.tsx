@@ -2,7 +2,8 @@ import { authClient } from "../lib/auth-client";
 import { useNavigate } from "react-router-dom";
 
 export default function Navbar() {
-  const { data: session, isPending } = authClient.useSession();
+  const { useSession } = authClient;
+  const { data: session, isPending } = useSession();
   const navigate = useNavigate();
 
   if (isPending) return null;

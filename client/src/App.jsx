@@ -4,7 +4,8 @@ import { useEffect } from "react";
 
 export default function App() {
   const navigate = useNavigate();
-  const { data: session, isPending } = authClient.useSession();
+  const { useSession } = authClient;
+  const { data: session, isPending } = useSession();
 
   useEffect(() => {
     if (isPending) return;

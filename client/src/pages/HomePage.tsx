@@ -13,7 +13,8 @@ interface Ticket {
 }
 
 export default function HomePage() {
-  const { data: session, isPending } = authClient.useSession();
+  const { useSession } = authClient;
+  const { data: session, isPending } = useSession();
   const navigate = useNavigate();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(false);
