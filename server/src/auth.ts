@@ -13,7 +13,7 @@ export const auth = betterAuth({
     enableSignIn: true,
     enableSignUp: true,
   },
-  trustedOrigins: ["http://localhost:5173"],
+  trustedOrigins: ["http://localhost:5173", "http://127.0.0.1:5173"],
   secret: process.env.AUTH_SECRET,
 });
 

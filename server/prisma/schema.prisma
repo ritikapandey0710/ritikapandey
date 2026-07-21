@@ -22,6 +22,7 @@ model User {
   updatedAt     DateTime @updatedAt
   sessions      Session[]
   accounts      Account[]
+  tickets       Ticket[]   @relation("AssignedTickets")
 
   @@map("user")
 }
@@ -71,6 +72,34 @@ model Verification {
 
   @@index([identifier])
   @@map("verification")
+}
+
+model Ticket {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  status      TicketStatus @default(OPEN)
+  priority    TicketPriority @default(MEDIUM)
+  assigneeId  String?    // Reference to User.id
+  assignee    User?      @relation("AssignedTickets", fields: [assigneeId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([assigneeId])
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
 }
 
 enum Role {
