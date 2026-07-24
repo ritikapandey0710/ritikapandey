@@ -1,10 +1,8 @@
 import { authClient } from '../lib/auth-client';
-import { useNavigate } from 'react-router-dom';
 
 export default function HomePage() {
   const { useSession } = authClient;
   const { data: session, isPending } = useSession();
-  const navigate = useNavigate();
 
   if (isPending) return <div style={{ textAlign: 'center', padding: '2rem' }}>Loading...</div>;
   if (!session) return <div style={{ textAlign: 'center', padding: '2rem' }}>Please log in to continue.</div>;
