@@ -6,49 +6,40 @@ import { auth } from "./auth";
 import { prisma } from "./prisma";
 import ticketRouter from "./ticket.router";
 
+// Validate required environment variables
+const requiredEnvVars = ["DATABASE_URL", "AUTH_SECRET"];
+for (const varName of requiredEnvVars) {
+  if (!process.env[varName]) {
+    throw new Error(`Missing required environment variable: ${varName}`);
+  }
+}
+
 const app = express();
 const port = process.env.PORT || 3001;
 
-// CORS must be first
-app.use(cors({ origin: "http://localhost:5173", credentials: true }));
+// CORS must be first - allow both localhost and 127.0.0.1 for dev flexibility
+app.use(cors({
+  origin: ["http://localhost:5173", "http://127.0.0.1:5173"],
+  credentials: true
+}));
+
+// Request logging middleware
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next();
+});
+
+// Auth routes — must be before json middleware for better-auth
+app.use("/api/auth", toNodeHandler(auth));
 
 // Body parser
 app.use(express.json());
 
-// Auth routes — must use {*path} wildcard for Express 5 compatibility
-app.all("/api/auth/{*path}", toNodeHandler(auth));
-
-// Ticket API routes
+// Ticket routes
 app.use("/api/tickets", ticketRouter);
 
 app.get("/", (_req: Request, res: Response) => {
-  res.json({ message: "Help Desk API" });
-});
-
-app.get("/api/health", (_req: Request, res: Response) => {
-  res.json({ status: "OK" });
-});
-
-app.get("/api/db-test", async (_req: Request, res: Response) => {
-  try {
-    const count = await prisma.user.count();
-    res.json({ message: "Database connected", userCount: count });
-  } catch (error) {
-    console.error("Database connection error:", error);
-    res.status(500).json({ error: "Database connection failed" });
-  }
-});
-
-app.get("/api/users", async (_req: Request, res: Response) => {
-  try {
-    const users = await prisma.user.findMany({
-      select: { id: true, email: true, name: true, role: true, createdAt: true },
-    });
-    res.json(users);
-  } catch (error) {
-    console.error("Error fetching users:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
+  res.json({ message: "Auth API" });
 });
 
 app.listen(port, () => {

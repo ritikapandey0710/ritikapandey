@@ -5,16 +5,19 @@ import { betterAuth } from "better-auth";
 console.log("Loading auth module...");
 
 export const auth = betterAuth({
-  baseURL: "http://localhost:3001",
+  baseURL: process.env.BETTER_AUTH_URL || process.env.APP_URL || `http://localhost:${process.env.PORT || 3001}`,
   database: prismaAdapter(prisma, {
     provider: "postgresql",
   }),
   emailAndPassword: {
-    enableSignIn: true,
-    enableSignUp: true,
+    enabled: true,
   },
-  trustedOrigins: ["http://localhost:5173", "http://127.0.0.1:5173"],
+  trustedOrigins: process.env.TRUSTED_ORIGINS
+        ? process.env.TRUSTED_ORIGINS.split(',').map(origin => origin.trim()).filter(Boolean)
+        : ["*"], // Allow all origins for debugging (via TRUSTED_ORIGINS env var, comma separated)
   secret: process.env.AUTH_SECRET,
 });
 
+console.log("Auth instance:", Object.keys(auth));
+console.log("Auth API:", Object.keys(auth.api));
 console.log("Auth module loaded");

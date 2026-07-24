@@ -1,42 +1,48 @@
-import { authClient } from "../lib/auth-client";
-import { useNavigate } from "react-router-dom";
+import { authClient } from '../lib/auth-client';
+import { useNavigate } from 'react-router-dom';
 
 export default function Navbar() {
   const { useSession } = authClient;
   const { data: session, isPending } = useSession();
   const navigate = useNavigate();
 
-  if (isPending) return null;
+  if (isPending) return <div>Loading...</div>;
+  if (!session) return null; // Should not happen when used within ProtectedRoute
 
-  const handleSignOut = async () => {
+  const handleLogout = async () => {
     await authClient.signOut();
-    navigate("/login");
+    navigate('/login');
   };
 
   return (
-    <div style={{
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "center",
-      padding: "1rem 2rem",
-      backgroundColor: "#1f2937",
-      color: "white",
-      borderBottom: "1px solid #374151"
-    }}>
-      <div style={{ fontSize: "1.25rem", fontWeight: "bold" }}>Help Desk</div>
-      {session ? (
-        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-          <span>Hello, {session.user.name || session.user.email}!</span>
-          <button
-            onClick={handleSignOut}
-            style={{ padding: "0.5rem 1rem", backgroundColor: "#ef4444", color: "white", border: "none", borderRadius: "4px", cursor: "pointer" }}
-          >
-            Sign Out
-          </button>
-        </div>
-      ) : (
-        <div>Not logged in</div>
-      )}
-    </div>
+    <nav
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: '0.75rem 1.5rem',
+        backgroundColor: '#f9fafb',
+        borderBottom: '1px solid #e5e7eb',
+      }}
+    >
+      <span style={{ fontWeight: 600, color: '#1f2937' }}>
+        Hello, {session.user.name || 'User'}!
+      </span>
+      <button
+        onClick={handleLogout}
+        style={{
+          padding: '0.5rem 1rem',
+          backgroundColor: '#ef4444',
+          color: 'white',
+          border: 'none',
+          borderRadius: '6px',
+          fontSize: '0.875rem',
+          fontWeight: '600',
+          cursor: 'pointer',
+        }}
+      >
+        Sign out
+      </button>
+    </nav>
   );
 }

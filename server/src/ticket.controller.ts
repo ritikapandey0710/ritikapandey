@@ -141,8 +141,7 @@ export async function updateTicket(req: any, res: any) {
         assignee: {
           select: {
             id: true,
-            name: true,
-            email: true
+            name: true
           }
         }
       }
