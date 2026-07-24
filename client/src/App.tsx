@@ -35,31 +35,33 @@ export default function App() {
     await authClient.signOut();
   }
 
-  if (isPending) return <div style={styles.center}>Loading…</div>;
+  if (isPending) return <div className="flex items-center justify-center min-h-screen bg-gray-100">Loading…</div>;
 
   if (session) {
     return (
-      <div style={styles.center}>
-        <div style={styles.card}>
-          <h2 style={styles.title}>✅ Logged in</h2>
-          <p style={styles.info}><b>Name:</b> {session.user.name}</p>
-          <p style={styles.info}><b>Email:</b> {session.user.email}</p>
-          <p style={styles.info}><b>ID:</b> {session.user.id}</p>
-          <button style={styles.btn} onClick={handleLogout}>Sign out</button>
+      <div className="flex items-center justify-center min-h-screen bg-gray-100">
+        <div className="bg-white p-8 rounded-lg shadow-lg w-full max-w-[380px]">
+          <h2 className="text-xl font-bold mb-4">✅ Logged in</h2>
+          <p className="mb-2"><b>Name:</b> {session.user.name}</p>
+          <p className="mb-2"><b>Email:</b> {session.user.email}</p>
+          <p className="mb-2"><b>ID:</b> {session.user.id}</p>
+          <button className="px-3 py-2 bg-blue-600 text-white font-semibold rounded hover:bg-blue-700" onClick={handleLogout}>
+            Sign out
+          </button>
         </div>
       </div>
     );
   }
 
   return (
-    <div style={styles.center}>
-      <div style={styles.card}>
-        <h2 style={styles.title}>{view === "login" ? "Sign in" : "Sign up"}</h2>
-        {error && <p style={styles.error}>{error}</p>}
-        <form onSubmit={handleSubmit} style={styles.form}>
+    <div className="flex items-center justify-center min-h-screen bg-gray-100">
+      <div className="bg-white p-8 rounded-lg shadow-lg w-full max-w-[380px]">
+        <h2 className="text-xl font-bold mb-4">{view === "login" ? "Sign in" : "Sign up"}</h2>
+        {error && <p className="mb-2 text-red-600 text-sm">{error}</p>}
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           {view === "signup" && (
             <input
-              style={styles.input}
+              className="px-3 py-2 rounded border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="Name"
               value={name}
               onChange={e => setName(e.target.value)}
@@ -67,7 +69,7 @@ export default function App() {
             />
           )}
           <input
-            style={styles.input}
+            className="px-3 py-2 rounded border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             type="email"
             placeholder="Email"
             value={email}
@@ -75,21 +77,21 @@ export default function App() {
             required
           />
           <input
-            style={styles.input}
+            className="px-3 py-2 rounded border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             type="password"
             placeholder="Password"
             value={password}
             onChange={e => setPassword(e.target.value)}
             required
           />
-          <button style={styles.btn} type="submit" disabled={loading}>
+          <button className="px-3 py-2 bg-blue-600 text-white font-semibold rounded hover:bg-blue-700" type="submit" disabled={loading}>
             {loading ? "…" : view === "login" ? "Sign in" : "Sign up"}
           </button>
         </form>
-        <p style={styles.toggle}>
+        <p className="mt-4 text-sm text-center text-gray-600">
           {view === "login" ? "No account? " : "Have an account? "}
           <span
-            style={styles.link}
+            className="text-blue-600 font-semibold underline cursor-pointer"
             onClick={() => { setView(view === "login" ? "signup" : "login"); setError(""); }}
           >
             {view === "login" ? "Sign up" : "Sign in"}
@@ -99,16 +101,3 @@ export default function App() {
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  center: { display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: "#f0f2f5" },
-  card: { background: "#fff", padding: "2rem", borderRadius: "12px", boxShadow: "0 4px 24px rgba(0,0,0,0.1)", width: "100%", maxWidth: "380px" },
-  title: { margin: "0 0 1.2rem", fontSize: "1.4rem", fontWeight: 700 },
-  form: { display: "flex", flexDirection: "column", gap: "0.75rem" },
-  input: { padding: "0.65rem 0.9rem", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "0.95rem", outline: "none" },
-  btn: { padding: "0.7rem", borderRadius: "8px", background: "#2563eb", color: "#fff", border: "none", fontWeight: 600, fontSize: "0.95rem", cursor: "pointer" },
-  error: { color: "#dc2626", fontSize: "0.875rem", margin: "0 0 0.5rem" },
-  info: { margin: "0.3rem 0", fontSize: "0.9rem", color: "#374151" },
-  toggle: { marginTop: "1rem", fontSize: "0.875rem", textAlign: "center", color: "#6b7280" },
-  link: { color: "#2563eb", cursor: "pointer", fontWeight: 600 },
-};

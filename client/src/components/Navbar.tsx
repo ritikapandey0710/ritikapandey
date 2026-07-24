@@ -15,31 +15,13 @@ export default function Navbar() {
   };
 
   return (
-    <nav
-      style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: '0.75rem 1.5rem',
-        backgroundColor: '#f9fafb',
-        borderBottom: '1px solid #e5e7eb',
-      }}
-    >
-      <span style={{ fontWeight: 600, color: '#1f2937' }}>
+    <nav className="flex justify-between items-center px-4 py-2 bg-gray-50 border-b border-gray-200">
+      <span className="font-semibold text-gray-800">
         Hello, {session.user.name || 'User'}!
       </span>
       <button
         onClick={handleLogout}
-        style={{
-          padding: '0.5rem 1rem',
-          backgroundColor: '#ef4444',
-          color: 'white',
-          border: 'none',
-          borderRadius: '6px',
-          fontSize: '0.875rem',
-          fontWeight: '600',
-          cursor: 'pointer',
-        }}
+        className="px-3 py-1.5 bg-red-500 text-white font-medium rounded hover:bg-red-600"
       >
         Sign out
       </button>

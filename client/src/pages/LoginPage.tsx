@@ -92,106 +92,86 @@ export default function LoginPage() {
     }
   };
 
-  if (isPending) return <div style={{ textAlign: "center", padding: "2rem" }}>Loading…</div>;
+  if (isPending) return <div className="flex items-center justify-center min-h-screen bg-gray-50">Loading…</div>;
   if (session) return null;
 
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", background: "#f0f2f5" }}>
-      <div style={{ background: "#fff", padding: "2rem", borderRadius: "12px", boxShadow: "0 4px 24px rgba(0,0,0,0.1)", width: "100%", maxWidth: "380px" }}>
-        <h2 style={{ margin: "0 0 1.2rem", fontSize: "1.4rem", fontWeight: 700 }}>
-          {view === "login" ? "Sign in" : "Sign up"}
-        </h2>
-        {formError && <p style={{ color: "#dc2626", fontSize: "0.875rem", margin: "0 0 0.5rem" }}>{formError}</p>}
-        <form onSubmit={view === "login" ? loginForm.handleSubmit(onSubmit) : signupForm.handleSubmit(onSubmit)} style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+    <div className="flex items-center justify-center min-h-screen bg-gray-50">
+      <div className="bg-white p-8 rounded-lg shadow-lg w-full max-w-[380px]">
+        <h2 className="mb-4 text-2xl font-bold">{view === "login" ? "Sign in" : "Sign up"}</h2>
+        {formError && <p className="mb-2 text-sm text-red-600">{formError}</p>}
+        <form
+          onSubmit={view === "login" ? loginForm.handleSubmit(onSubmit) : signupForm.handleSubmit(onSubmit)}
+          className="flex flex-col gap-4"
+        >
           {view === "signup" && (
             <div>
-              <label style={{ display: "block", fontSize: "0.875rem", marginBottom: "0.25rem", fontWeight: 500 }}>Name</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
               <input
                 {...signupForm.register("name")}
-                style={{
-                  padding: "0.65rem 0.9rem",
-                  borderRadius: "8px",
-                  border: "1px solid #d1d5db",
-                  ...(signupForm.formState.errors.name && { borderColor: "#dc2626" }),
-                  fontSize: "0.95rem",
-                  outline: "none",
-                  width: "100%",
-                  boxSizing: "border-box",
-                }}
+                className={`
+                  block w-full rounded border border-gray-300 px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-blue-500
+                  ${signupForm.formState.errors.name ? "border-red-500" : ""}
+                `}
                 placeholder="Name"
               />
-              {signupForm.formState.errors.name && <p style={{ color: "#dc2626", fontSize: "0.75rem", marginTop: "0.25rem" }}>{signupForm.formState.errors.name.message}</p>}
+              {signupForm.formState.errors.name && (
+                <p className="mt-1 text-sm text-red-500">{signupForm.formState.errors.name.message}</p>
+              )}
             </div>
           )}
           <div>
-            <label style={{ display: "block", fontSize: "0.875rem", marginBottom: "0.25rem", fontWeight: 500 }}>Email</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
             <input
               {...(view === "login" ? loginForm.register("email") : signupForm.register("email"))}
               type="email"
-              style={{
-                padding: "0.65rem 0.9rem",
-                borderRadius: "8px",
-                border: "1px solid #d1d5db",
-                ...((view === "login" ? loginForm.formState.errors.email : signupForm.formState.errors.email) && { borderColor: "#dc2626" }),
-                fontSize: "0.95rem",
-                outline: "none",
-                width: "100%",
-                boxSizing: "border-box",
-              }}
+              className={`
+                block w-full rounded border border-gray-300 px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-blue-500
+                ${(view === "login" ? loginForm.formState.errors.email : signupForm.formState.errors.email)
+                  ? "border-red-500"
+                  : ""}
+              `}
               placeholder="Email"
             />
-            {(view === "login" ? loginForm.formState.errors.email : signupForm.formState.errors.email) &&
-              <p style={{ color: "#dc2626", fontSize: "0.75rem", marginTop: "0.25rem" }}>
+            {(view === "login" ? loginForm.formState.errors.email : signupForm.formState.errors.email) && (
+              <p className="mt-1 text-sm text-red-500">
                 {(view === "login" ? loginForm.formState.errors.email : signupForm.formState.errors.email)?.message}
               </p>
-            }
+            )}
           </div>
           <div>
-            <label style={{ display: "block", fontSize: "0.875rem", marginBottom: "0.25rem", fontWeight: 500 }}>Password</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
             <input
               {...(view === "login" ? loginForm.register("password") : signupForm.register("password"))}
               type="password"
-              style={{
-                padding: "0.65rem 0.9rem",
-                borderRadius: "8px",
-                border: "1px solid #d1d5db",
-                ...((view === "login" ? loginForm.formState.errors.password : signupForm.formState.errors.password) && { borderColor: "#dc2626" }),
-                fontSize: "0.95rem",
-                outline: "none",
-                width: "100%",
-                boxSizing: "border-box",
-              }}
+              className={`
+                block w-full rounded border border-gray-300 px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-blue-500
+                ${(view === "login" ? loginForm.formState.errors.password : signupForm.formState.errors.password)
+                  ? "border-red-500"
+                  : ""}
+              `}
               placeholder="Password"
             />
-            {(view === "login" ? loginForm.formState.errors.password : signupForm.formState.errors.password) &&
-              <p style={{ color: "#dc2626", fontSize: "0.75rem", marginTop: "0.25rem" }}>
+            {(view === "login" ? loginForm.formState.errors.password : signupForm.formState.errors.password) && (
+              <p className="mt-1 text-sm text-red-500">
                 {(view === "login" ? loginForm.formState.errors.password : signupForm.formState.errors.password)?.message}
               </p>
-            }
+            )}
           </div>
           <button
-            style={{
-              padding: "0.7rem",
-              borderRadius: "8px",
-              background: "#2563eb",
-              color: "#fff",
-              border: "none",
-              fontWeight: 600,
-              fontSize: "0.95rem",
-              cursor: "pointer",
-              width: "100%",
-              opacity: submitting ? 0.7 : 1
-            }}
             type="submit"
             disabled={submitting}
+            className={`
+              w-full px-3 py-2 bg-blue-600 text-white font-semibold rounded hover:bg-blue-700 disabled:opacity-70
+            `}
           >
             {submitting ? "Submitting..." : view === "login" ? "Sign in" : "Sign up"}
           </button>
         </form>
-        <p style={{ marginTop: "1rem", fontSize: "0.875rem", textAlign: "center", color: "#6b7280" }}>
+        <p className="mt-4 text-sm text-center text-gray-600">
           {view === "login" ? "No account? " : "Have an account? "}
           <span
-            style={{ color: "#2563eb", cursor: "pointer", fontWeight: 600 }}
+            className="text-blue-600 font-semibold underline cursor-pointer"
             onClick={() => {
               setView(view === "login" ? "signup" : "login");
               setFormError("");
