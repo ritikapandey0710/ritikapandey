@@ -4,6 +4,8 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { authClient } from "../lib/auth-client";
 import { useNavigate, useLocation } from "react-router-dom";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 // Zod schemas for validation
 const loginSchema = z.object({
@@ -96,90 +98,105 @@ export default function LoginPage() {
   if (session) return null;
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-50">
-      <div className="bg-white p-8 rounded-lg shadow-lg w-full max-w-[380px]">
-        <h2 className="mb-4 text-2xl font-bold">{view === "login" ? "Sign in" : "Sign up"}</h2>
-        {formError && <p className="mb-2 text-sm text-red-600">{formError}</p>}
-        <form
-          onSubmit={view === "login" ? loginForm.handleSubmit(onSubmit) : signupForm.handleSubmit(onSubmit)}
-          className="flex flex-col gap-4"
-        >
-          {view === "signup" && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-              <input
-                {...signupForm.register("name")}
-                className={`
-                  block w-full rounded border border-gray-300 px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-blue-500
-                  ${signupForm.formState.errors.name ? "border-red-500" : ""}
-                `}
-                placeholder="Name"
-              />
-              {signupForm.formState.errors.name && (
-                <p className="mt-1 text-sm text-red-500">{signupForm.formState.errors.name.message}</p>
-              )}
+    <div className="flex items-center justify-center min-h-screen bg-gray-50 p-4">
+      <div className="w-full max-w-sm">
+        {/* Using Card component from shadcn */}
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <h2 className="mb-6 text-2xl font-bold text-center">{view === "login" ? "Sign in" : "Sign up"}</h2>
+          {formError && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded">
+              {formError}
             </div>
           )}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-            <input
-              {...(view === "login" ? loginForm.register("email") : signupForm.register("email"))}
-              type="email"
-              className={`
-                block w-full rounded border border-gray-300 px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-blue-500
-                ${(view === "login" ? loginForm.formState.errors.email : signupForm.formState.errors.email)
-                  ? "border-red-500"
-                  : ""}
-              `}
-              placeholder="Email"
-            />
-            {(view === "login" ? loginForm.formState.errors.email : signupForm.formState.errors.email) && (
-              <p className="mt-1 text-sm text-red-500">
-                {(view === "login" ? loginForm.formState.errors.email : signupForm.formState.errors.email)?.message}
-              </p>
-            )}
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-            <input
-              {...(view === "login" ? loginForm.register("password") : signupForm.register("password"))}
-              type="password"
-              className={`
-                block w-full rounded border border-gray-300 px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-blue-500
-                ${(view === "login" ? loginForm.formState.errors.password : signupForm.formState.errors.password)
-                  ? "border-red-500"
-                  : ""}
-              `}
-              placeholder="Password"
-            />
-            {(view === "login" ? loginForm.formState.errors.password : signupForm.formState.errors.password) && (
-              <p className="mt-1 text-sm text-red-500">
-                {(view === "login" ? loginForm.formState.errors.password : signupForm.formState.errors.password)?.message}
-              </p>
-            )}
-          </div>
-          <button
-            type="submit"
-            disabled={submitting}
-            className={`
-              w-full px-3 py-2 bg-blue-600 text-white font-semibold rounded hover:bg-blue-700 disabled:opacity-70
-            `}
+          <form
+            onSubmit={view === "login" ? loginForm.handleSubmit(onSubmit) : signupForm.handleSubmit(onSubmit)}
+            className="space-y-6"
           >
-            {submitting ? "Submitting..." : view === "login" ? "Sign in" : "Sign up"}
-          </button>
-        </form>
-        <p className="mt-4 text-sm text-center text-gray-600">
-          {view === "login" ? "No account? " : "Have an account? "}
-          <span
-            className="text-blue-600 font-semibold underline cursor-pointer"
-            onClick={() => {
-              setView(view === "login" ? "signup" : "login");
-              setFormError("");
-            }}
-          >
-            {view === "login" ? "Sign up" : "Sign in"}
-          </span>
-        </p>
+            {view === "signup" && (
+              <div className="space-y-2">
+                <div className="space-y-2">
+                  <label htmlFor="name" className="block text-sm font-medium text-gray-900">
+                    Name
+                  </label>
+                  <Input
+                    {...signupForm.register("name", {
+                      required: "Name is required",
+                    })}
+                    id="name"
+                    placeholder="Enter your name"
+                  />
+                  {signupForm.formState.errors.name && (
+                    <p className="mt-1 text-sm text-red-600">{signupForm.formState.errors.name.message}</p>
+                  )}
+                </div>
+              </div>
+            )}
+            <div className="space-y-2">
+              <label htmlFor="email" className="block text-sm font-medium text-gray-900">
+                Email address
+              </label>
+              <Input
+                {...(view === "login" ? loginForm.register("email", {
+                  required: "Email is required",
+                }) : signupForm.register("email", {
+                  required: "Email is required",
+                }))}
+                id="email"
+                type="email"
+                autoComplete="username"
+                placeholder="you@example.com"
+              />
+              {(view === "login" ? loginForm.formState.errors.email : signupForm.formState.errors.email) && (
+                <p className="mt-1 text-sm text-red-600">
+                  {(view === "login" ? loginForm.formState.errors.email : signupForm.formState.errors.email)?.message}
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="password" className="block text-sm font-medium text-gray-900">
+                Password
+              </label>
+              <Input
+                {...(view === "login" ? loginForm.register("password", {
+                  required: "Password is required",
+                  minLength: 6,
+                }) : signupForm.register("password", {
+                  required: "Password is required",
+                  minLength: 6,
+                }))}
+                id="password"
+                type="password"
+                autoComplete="current-password"
+                placeholder="••••••••"
+              />
+              {(view === "login" ? loginForm.formState.errors.password : signupForm.formState.errors.password) && (
+                <p className="mt-1 text-sm text-red-600">
+                  {(view === "login" ? loginForm.formState.errors.password : signupForm.formState.errors.password)?.message}
+                </p>
+              )}
+            </div>
+            <Button
+              type="submit"
+              disabled={submitting}
+              className="w-full"
+            >
+              {submitting ? "Signing in..." : view === "login" ? "Sign in" : "Sign up"}
+            </Button>
+          </form>
+          <p className="mt-6 text-center text-sm text-gray-600">
+            {view === "login" ? "Don’t have an account?" : "Already have an account?"}
+            <button
+              type="button"
+              onClick={() => {
+                setView(view === "login" ? "signup" : "login");
+                setFormError("");
+              }}
+              className="font-semibold text-indigo-600 hover:text-indigo-500 underline"
+            >
+              {view === "login" ? "Sign up" : "Sign in"}
+            </button>
+          </p>
+        </div>
       </div>
     </div>
   );

@@ -20,4 +20,9 @@ export const auth = betterAuth({
 
 console.log("Auth instance:", Object.keys(auth));
 console.log("Auth API:", Object.keys(auth.api));
+console.log("Auth options:", Object.keys(auth.options ?? {}));
+console.log("Auth middleware?", typeof auth.middleware);
+console.log("Auth handler?", typeof auth.handler);
+console.log("All keys:", Object.keys(auth));
+
 console.log("Auth module loaded");

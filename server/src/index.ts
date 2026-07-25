@@ -29,17 +29,22 @@ app.use((req, res, next) => {
   next();
 });
 
-// Auth routes — must be before json middleware for better-auth
-app.use("/api/auth", toNodeHandler(auth));
-
 // Body parser
 app.use(express.json());
+
+// Auth routes — must be before json middleware for better-auth
+app.use("/api/auth", auth.handler);
 
 // Ticket routes
 app.use("/api/tickets", ticketRouter);
 
 app.get("/", (_req: Request, res: Response) => {
   res.json({ message: "Auth API" });
+});
+
+app.use((err: any, req: Request, res: Response, next: Function) => {
+  console.error(err.stack);
+  res.status(500).json({ error: 'Something went wrong!' });
 });
 
 app.listen(port, () => {
