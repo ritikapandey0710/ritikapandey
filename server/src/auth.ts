@@ -13,4 +13,14 @@ export const auth = betterAuth({
   },
   trustedOrigins: ["http://localhost:5173", "http://127.0.0.1:5173"],
   secret: process.env.AUTH_SECRET,
+  user: {
+    additionalFields: {
+      role: {
+        type: "string",
+        required: false,
+        defaultValue: "AGENT",
+        input: false,
+      },
+    },
+  },
 });

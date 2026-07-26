@@ -1,12 +1,43 @@
 import { useState } from "react";
 import { authClient } from "./lib/auth-client";
+import { Routes, Route, Navigate } from 'react-router-dom';
+import Navbar from './components/Navbar';
+import HomePage from './pages/HomePage';
+import LoginPage from './pages/LoginPage';
+import UserPage from './pages/UserPage';
 
-type View = "login" | "signup";
+// Private route component to protect routes (requires authentication)
+function PrivateRoute({ children }: { children: React.ReactNode }) {
+  const { data: session, isPending } = authClient.useSession();
+  if (isPending) return <div>Loading...</div>;
+  return session ? (
+    <>
+      <Navbar />
+      <div>{children}</div>
+    </>
+  ) : <Navigate to="/login" replace />;
+}
+
+// Admin route component to protect routes (requires admin role)
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { data: session, isPending } = authClient.useSession();
+  if (isPending) return <div>Loading...</div>;
+  // If not authenticated, redirect to login
+  if (!session) return <Navigate to="/login" replace />;
+  // If not admin, redirect to home
+  if (session.user.role !== "ADMIN") return <Navigate to="/" replace />;
+  return (
+    <>
+      <Navbar />
+      <div>{children}</div>
+    </>
+  );
+}
 
 export default function App() {
   const { data: session, isPending } = authClient.useSession();
 
-  const [view, setView] = useState<View>("login");
+  const [view, setView] = useState<"login" | "signup">("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -38,17 +69,13 @@ export default function App() {
 
   if (session) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-100">
-        <div className="bg-white p-8 rounded-lg shadow-lg w-full max-w-[380px]">
-          <h2 className="text-xl font-bold mb-4">✅ Logged in</h2>
-          <p className="mb-2"><b>Name:</b> {session.user.name}</p>
-          <p className="mb-2"><b>Email:</b> {session.user.email}</p>
-          <p className="mb-2"><b>ID:</b> {session.user.id}</p>
-          <button className="px-3 py-2 bg-blue-600 text-white font-semibold rounded hover:bg-blue-700" onClick={handleLogout}>
-            Sign out
-          </button>
-        </div>
-      </div>
+      <>
+        <Routes>
+          <Route path="/" element={<PrivateRoute><HomePage /></PrivateRoute>} />
+          <Route path="/user" element={<AdminRoute><UserPage /></AdminRoute>} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+      </>
     );
   }
 
