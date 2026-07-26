@@ -1,0 +1,66 @@
+import "dotenv/config";
+import express, { Request, Response } from "express";
+import cors from "cors";
+import { toNodeHandler } from "better-auth/node";
+import { auth } from "./auth";
+import ticketRouter from "./ticket.router";
+
+const requiredEnvVars = ["DATABASE_URL", "AUTH_SECRET"];
+for (const varName of requiredEnvVars) {
+  if (!process.env[varName]) {
+    throw new Error(`Missing required environment variable: ${varName}`);
+  }
+}
+
+const app = express();
+const port = process.env.PORT || 3001;
+
+app.use(cors({
+  origin: ["http://localhost:5173", "http://127.0.0.1:5173"],
+  credentials: true
+}));
+
+// Request logging middleware
+app.use((req, _res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next();
+});
+
+// Body parser - must come before auth routes for JSON bodies
+app.use(express.json());
+
+// Root route
+app.get("/", (_req: Request, res: Response) => {
+  res.json({ message: "Auth API" });
+});
+
+// Debug middleware to see what the auth middleware receives
+app.use("/api/auth", (req, res, next) => {
+  console.log(`[AUTH PRE] Method: ${req.method}, Original URL: ${req.originalUrl}, Path: ${req.path}`);
+  next();
+});
+
+// Auth routes — mounted at /api/auth
+const authHandler = toNodeHandler(auth);
+app.use("/api/auth", (req, res, next) => {
+  console.log("[AUTH MIDDLEWARE] Calling auth handler");
+  authHandler(req, res, (err: any) => {
+    if (err) {
+      console.error("[AUTH MIDDLEWARE] Error from auth handler:", err);
+      return next(err);
+    }
+    console.log("[AUTH MIDDLEWARE] Auth handler called next()");
+    next();
+  });
+});
+
+app.use("/api/tickets", ticketRouter);
+
+app.use((err: any, _req: Request, res: Response, _next: Function) => {
+  console.error(err.stack);
+  res.status(500).json({ error: "Something went wrong!" });
+});
+
+app.listen(port, () => {
+  console.log(`Server running at http://localhost:${port}`);
+});

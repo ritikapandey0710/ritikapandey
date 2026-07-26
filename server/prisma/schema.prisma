@@ -12,16 +12,18 @@ datasource db {
 }
 
 model User {
-  id            String   @id @default(uuid())
-  name          String?
-  email         String   @unique
-  emailVerified Boolean  @default(false)
-  image         String?
-  role          Role     @default(AGENT)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  sessions      Session[]
-  accounts      Account[]
+  id              String   @id @default(uuid())
+  name            String?
+  email           String   @unique
+  emailVerified   Boolean  @default(false)
+  image           String?
+  role            Role     @default(AGENT)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  sessions        Session[]
+  accounts        Account[]
+  assignedTickets Ticket[] @relation("AssignedTickets")
+  reportedTickets Ticket[] @relation("ReportedTickets")
 
   @@map("user")
 }
@@ -42,18 +44,18 @@ model Session {
 }
 
 model Account {
-  id                    String   @id
+  id                    String    @id
   accountId             String
   providerId            String
   userId                String
-  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   accessToken           String?
   refreshToken          String?
   idToken               String?
   accessTokenExpiresAt  DateTime?
   refreshTokenExpiresAt DateTime?
   scope                 String?
-  password              String?   // hashed password for credentials provider
+  password              String?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
@@ -78,20 +80,32 @@ enum Role {
   AGENT
 }
 
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
 
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
 
 model Ticket {
-  id          String   @id @default(uuid())
+  id          String         @id @default(uuid())
   title       String
   description String?
-  status      TicketStatus @default(OPEN)
+  status      TicketStatus   @default(OPEN)
   priority    TicketPriority @default(MEDIUM)
   assigneeId  String?
-  assignee    User?      @relation(fields: [assigneeId], references: [id])
-  reporterId  String
-  reporter    User       @relation(fields: [reporterId], references: [id])
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  assignee    User?          @relation("AssignedTickets", fields: [assigneeId], references: [id])
+  reporterId  String?
+  reporter    User?          @relation("ReportedTickets", fields: [reporterId], references: [id])
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
 
   @@index([assigneeId])
   @@index([reporterId])

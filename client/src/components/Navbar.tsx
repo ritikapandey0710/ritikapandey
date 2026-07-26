@@ -1,13 +1,10 @@
 import { authClient } from '../lib/auth-client';
 import { useNavigate } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
 
 export default function Navbar() {
-  const { useSession } = authClient;
-  const { data: session, isPending } = useSession();
+  const { data: session } = authClient.useSession();
   const navigate = useNavigate();
-
-  if (isPending) return <div>Loading...</div>;
-  if (!session) return null; // Should not happen when used within ProtectedRoute
 
   const handleLogout = async () => {
     await authClient.signOut();
@@ -15,16 +12,27 @@ export default function Navbar() {
   };
 
   return (
-    <nav className="flex justify-between items-center px-4 py-2 bg-gray-50 border-b border-gray-200">
-      <span className="font-semibold text-gray-800">
-        Hello, {session.user.name || 'User'}!
-      </span>
-      <button
-        onClick={handleLogout}
-        className="px-3 py-1.5 bg-red-500 text-white font-medium rounded hover:bg-red-600"
-      >
-        Sign out
-      </button>
+    <nav className="sticky top-0 z-50 bg-white border-b border-border shadow-sm">
+      <div className="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
+            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" />
+            </svg>
+          </div>
+          <span className="font-semibold text-foreground">Help Desk</span>
+        </div>
+        <div className="flex items-center gap-3">
+          {session && (
+            <span className="text-sm text-muted-foreground hidden sm:block">
+              {session.user.email}
+            </span>
+          )}
+          <Button variant="outline" size="sm" onClick={handleLogout}>
+            Sign out
+          </Button>
+        </div>
+      </div>
     </nav>
   );
 }

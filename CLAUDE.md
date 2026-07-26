@@ -23,7 +23,11 @@ This document provides context and guidelines for working on the AI‑powered ti
 - **Backend**: Express.js with TypeScript, Bun runtime
 - **Frontend**: React with TypeScript, Vite
 - **Database**: PostgreSQL (session storage via `express-session` + `connect-pg-simple`)
-- **Authentication**: Database‑backed sessions
+- **Authentication**: 
+  - **Backend**: Better Auth with email/password providers and PostgreSQL adapter
+  - **Frontend**: Better Auth React client for authentication state management
+  - **Features**: Email/password login, session management, protected routes
+  - **Configuration**: Environment variables for AUTH_SECRET and BETTER_AUTH_URL
 - **AI/LLM**: OpenAI GPT‑4‑turbo (or open‑source LLM) via LangChain/LlamaIndex
 - **Knowledge Base**: Vector store (Chroma or Pinecone)
 - **Job Queue**: BullMQ (Redis‑backed) or Celery

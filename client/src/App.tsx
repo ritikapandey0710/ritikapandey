@@ -4,8 +4,7 @@ import { authClient } from "./lib/auth-client";
 type View = "login" | "signup";
 
 export default function App() {
-  const { useSession } = authClient;
-  const { data: session, isPending } = useSession();
+  const { data: session, isPending } = authClient.useSession();
 
   const [view, setView] = useState<View>("login");
   const [name, setName] = useState("");

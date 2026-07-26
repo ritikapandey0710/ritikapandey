@@ -8,8 +8,7 @@ import Navbar from './components/Navbar'
 
 // Private route component to protect routes
 function PrivateRoute({ children }: { children: React.ReactNode }) {
-  const { useSession } = authClient;
-  const { data: session, isPending } = useSession();
+  const { data: session, isPending } = authClient.useSession();
   if (isPending) return <div>Loading...</div>;
   return session ? (
     <>
