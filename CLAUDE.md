@@ -63,17 +63,16 @@ The project has the **Context7** MCP server configured, allowing you to query th
 
 The tool will return the most recent, verified documentation excerpt, ensuring you always have up‑to‑date guidance.
 
+### Writing E2E Tests with e2e-test-writer
+
+For writing end-to-end tests with Playwright, refer to the `e2e-test-writer` file in the project root. This file contains guidelines and instructions for creating effective E2E tests for the ticket management system.
+
 ### Development Workflow
 1. **Clone the repository** and run `bun install` at the root.
 2. Start the required services (Postgres, Redis, MinIO, Chroma) via `docker compose up -d`.
 3. Run the backend: `bun run --workspace server dev`
 4. Run the frontend: `bun run --workspace client dev`
 5. Open `http://localhost:5173` in your browser.
-
-### Testing
-- Unit tests: Jest/Vitest
-- E2E tests: Playwright or Cypress (to be added)
-- Run tests with `bun test` (configured in each workspace).
 
 ### Contributing
 - Follow the existing code style (ESLint + Prettier).
