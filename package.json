@@ -6,10 +6,19 @@
   "scripts": {
     "dev": "concurrently \"bun run --cwd server dev\" \"bun run --cwd client dev\"",
     "dev:server": "bun run --cwd server dev",
-    "dev:client": "bun run --cwd client dev"
+    "dev:client": "bun run --cwd client dev",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:ci": "playwright test --ci",
+    "prisma:generate": "bun run --cwd server prisma generate",
+    "prisma:migrate:test": "bun run --cwd server prisma migrate deploy --env-file=.env.test"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "@playwright/test": "^1.62.0",
+    "concurrently": "^8.2.2",
+    "dotenv": "^17.4.2",
+    "playwright": "^1.62.0",
+    "ts-node": "^10.9.2"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",

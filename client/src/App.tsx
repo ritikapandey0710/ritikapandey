@@ -3,8 +3,8 @@ import { authClient } from "./lib/auth-client";
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import HomePage from './pages/HomePage';
-import LoginPage from './pages/LoginPage';
 import UserPage from './pages/UserPage';
+import type { AuthUser } from './types/user';
 
 // Private route component to protect routes (requires authentication)
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -24,8 +24,9 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   if (isPending) return <div>Loading...</div>;
   // If not authenticated, redirect to login
   if (!session) return <Navigate to="/login" replace />;
+  const user = session.user as AuthUser;
   // If not admin, redirect to home
-  if (session.user.role !== "ADMIN") return <Navigate to="/" replace />;
+  if (user.role !== "ADMIN") return <Navigate to="/" replace />;
   return (
     <>
       <Navbar />
@@ -59,10 +60,6 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }
-
-  async function handleLogout() {
-    await authClient.signOut();
   }
 
   if (isPending) return <div className="flex items-center justify-center min-h-screen bg-gray-100">Loading…</div>;

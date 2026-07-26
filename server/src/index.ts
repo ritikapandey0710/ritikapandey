@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
+import rateLimit from "express-rate-limit";
 import { toNodeHandler } from "better-auth/node";
 import { auth } from "./auth";
 import ticketRouter from "./ticket.router";
@@ -20,6 +21,17 @@ app.use(cors({
   credentials: true,
 }));
 
+// Rate limiting in production only
+if (process.env.NODE_ENV === 'production') {
+  const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // limit each IP to 100 requests per windowMs
+    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  });
+  app.use(limiter);
+}
+
 app.use((req, _res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
   next();
@@ -38,7 +50,7 @@ app.get("/", (_req: Request, res: Response) => {
 // Authentication middleware for ticket routes
 app.use("/api/tickets", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const session = await api.auth.getSession(req.headers);
+    const session = await auth.api.getSession({ headers: req.headers });
     if (!session) {
       return res.status(401).json({ error: "Unauthorized" });
     }

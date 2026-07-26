@@ -5,7 +5,8 @@ import LoginPage from './pages/LoginPage'
 import HomePage from './pages/HomePage'
 import UserPage from './pages/UserPage'
 import { authClient } from './lib/auth-client'
-import Navbar from './components/Navbar'
+import Navbar from './components/Navbar';
+import type { AuthUser } from './types/user';
 
 // Private route component to protect routes (requires authentication)
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -25,8 +26,7 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   if (isPending) return <div>Loading...</div>;
   // If not authenticated, redirect to login
   if (!session) return <Navigate to="/login" replace />;
-  // Add type assertion for user to access role
-  const user = session.user as { role: string };
+  const user = session.user as AuthUser;
   // If not admin, redirect to home
   if (user.role !== "ADMIN") return <Navigate to="/" replace />;
   return (

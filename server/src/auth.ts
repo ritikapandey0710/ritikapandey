@@ -40,7 +40,7 @@ export const auth = betterAuth({
   // Enable rate limiting to prevent brute force attacks
   rateLimit: {
     // Allow 5 failed attempts per 15 minutes per IP
-    getKey: (c) => c.ip,
+    getKey: (c: any) => c.ip,
     window: 15 * 60, // 15 minutes
     max: 5,
   },

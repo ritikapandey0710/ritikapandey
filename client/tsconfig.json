@@ -16,10 +16,9 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
-    /* Base URL and path mappings */
-    "baseUrl": ".",
+    /* Path mappings */
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["./src/*"]
     },
     "ignoreDeprecations": "6.0",
 
