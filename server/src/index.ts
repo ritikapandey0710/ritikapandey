@@ -1,5 +1,5 @@
 import "dotenv/config";
-import express, { Request, Response } from "express";
+import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import { toNodeHandler } from "better-auth/node";
 import { auth } from "./auth";
@@ -16,7 +16,7 @@ const app = express();
 const port = process.env.PORT || 3001;
 
 app.use(cors({
-  origin: ["http://localhost:5173", "http://127.0.0.1:5173"],
+  origin: ["http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174"],
   credentials: true,
 }));
 
@@ -33,6 +33,22 @@ app.use(express.json());
 
 app.get("/", (_req: Request, res: Response) => {
   res.json({ message: "Help Desk API" });
+});
+
+// Authentication middleware for ticket routes
+app.use("/api/tickets", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const session = await api.auth.getSession(req.headers);
+    if (!session) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    // Attach user info to request for authorization checks
+    (req as any).user = session.user;
+    next();
+  } catch (error) {
+    console.error("Authentication error:", error);
+    return res.status(401).json({ error: "Unauthorized" });
+  }
 });
 
 app.use("/api/tickets", ticketRouter);
