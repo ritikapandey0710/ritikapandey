@@ -1,7 +1,7 @@
 import { authClient } from '../lib/auth-client';
 import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/components/ui/Skeleton';
 import type { AuthUser } from '@/types/user';
 
 export default function Navbar() {

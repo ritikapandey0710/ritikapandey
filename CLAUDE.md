@@ -71,6 +71,46 @@ The tool will return the most recent, verified documentation excerpt, ensuring y
 
 For writing end-to-end tests with Playwright, refer to the `e2e-test-writer` file in the project root. This file contains guidelines and instructions for creating effective E2E tests for the ticket management system.
 
+### Writing Component Tests with Vitest and React Testing Library
+
+For writing unit and integration tests for React components, we use Vitest and React Testing Library.
+
+**Test File Conventions**
+- Place test files alongside the component they test, using the `.test.tsx` or `.test.ts` extension.
+  Example: `src/components/Button/Button.test.tsx`
+- Alternatively, you can place tests in a `__tests__` directory adjacent to the component.
+
+**Writing Tests**
+- Use `describe` to group tests for a component or feature.
+- Use `it` (or `test`) for individual test cases.
+- Render the component using the provided `renderWithQuery` utility (found in `client/src/test/render-utils.ts`) when the component uses React Query or other context providers.
+  Example:
+  ```tsx
+  import { renderWithQuery } from '../test/render-utils';
+  import MyComponent from './MyComponent';
+
+  describe('MyComponent', () => {
+    it('renders correctly', () => {
+      const { getByText } = renderWithQuery(<MyComponent />);
+      expect(getByText(/Hello World/i)).toBeInTheDocument();
+    });
+  });
+  ```
+- For components that require authentication, mock the `authClient.useSession` hook as shown in `UserPage.test.tsx`.
+- For data fetching, mock the API functions (e.g., `fetchUsers`) using `vi.mock` and control the return values (resolved, rejected, or pending).
+
+**Running Tests**
+- To run all tests: `bun run test` (from the client directory)
+- To run tests in watch mode: `bun run test --watch`
+- To run tests with UI: `bun run test:ui`
+- To generate coverage report: `bun run test:coverage`
+
+**Best Practices**
+- Test the component's behavior, not its implementation details.
+- Use accessibility roles and text to query elements (e.g., `getByRole`, `getByLabelText`, `getByText`).
+- Avoid testing private functions or internal state directly.
+- Mock external dependencies (API calls, timers, etc.) to make tests deterministic and fast.
+
 ### Development Workflow
 1. **Clone the repository** and run `bun install` at the root.
 2. Start the required services (Postgres, Redis, MinIO, Chroma) via `docker compose up -d`.

@@ -3,7 +3,7 @@ import { authClient } from "../lib/auth-client";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 export default function LoginPage() {
   const { data: session, isPending } = authClient.useSession();

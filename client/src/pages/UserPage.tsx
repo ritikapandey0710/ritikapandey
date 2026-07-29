@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { authClient } from '../lib/auth-client';
 import { fetchUsers } from '../api';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '../components/ui/Skeleton';
 
 export default function UserPage() {
   const { data: session, isPending: authPending } = authClient.useSession();

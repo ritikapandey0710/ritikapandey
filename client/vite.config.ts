@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, mergeConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 import { fileURLToPath } from 'url'
@@ -25,6 +25,22 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       },
+    },
+  },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: './src/test/setup.ts',
+    css: true,
+    reporters: ['verbose'],
+    coverage: {
+      reporter: ['text', 'json', 'html'],
+      exclude: [
+        'node_modules/',
+        'src/test/',
+        '**/*.config.*',
+        'vite.config.ts',
+      ],
     },
   },
 })
