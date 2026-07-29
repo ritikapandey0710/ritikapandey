@@ -6,7 +6,7 @@ const { resolve } = require('path');
 dotenvConfig({ path: __dirname + '/server/.env.test' });
 
 module.exports = defineConfig({
-  testDir: './tests',
+  testDir: './e2e/tests',
   timeout: 30 * 1000,
   expect: {
     timeout: 5000
@@ -20,6 +20,8 @@ module.exports = defineConfig({
     baseURL: 'http://localhost:5173',
     trace: 'on-first-retry',
   },
+  // Set the output directory for test results (like HTML report, etc.) to be under e2e
+  outputDir: './e2e/test-results',
   projects: [
     {
       name: 'chromium',
