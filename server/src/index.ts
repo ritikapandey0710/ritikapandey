@@ -5,7 +5,7 @@ import rateLimit from "express-rate-limit";
 import { toNodeHandler } from "better-auth/node";
 import { auth } from "./auth";
 import ticketRouter from "./ticket.router";
-import userRouter from "./user.router";
+import userRouter from "./modules/user/user.router";
 
 const requiredEnvVars = ["DATABASE_URL", "AUTH_SECRET"];
 for (const varName of requiredEnvVars) {
@@ -22,19 +22,19 @@ app.use(cors({
   credentials: true,
 }));
 
-// Rate limiting in production only
-if (process.env.NODE_ENV === 'production') {
-  const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // limit each IP to 100 requests per windowMs
-    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-  });
-  app.use(limiter);
-}
+// Rate limiting for all environments
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: process.env.NODE_ENV === 'production' ? 100 : 500,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use(limiter);
 
 app.use((req, _res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  const safeMethod = req.method.replace(/[\r\n]/g, '');
+  const safeUrl = req.url.replace(/[\r\n]/g, '');
+  console.log(`[${new Date().toISOString()}] ${safeMethod} ${safeUrl}`);
   next();
 });
 

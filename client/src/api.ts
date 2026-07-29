@@ -99,3 +99,13 @@ export async function fetchUsers() {
   });
   return response.data;
 }
+
+// User management functions
+export async function createUser(userData: { name: string; email: string; password: string }) {
+  const response = await api.post('/users', userData, {
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+  return response.data;
+}

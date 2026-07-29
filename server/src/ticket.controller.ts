@@ -8,22 +8,32 @@ export async function getTickets(req: any, res: any) {
   const { search, status, priority } = req.query;
   const where: any = {};
 
+  const validStatuses = ["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"];
+  const validPriorities = ["LOW", "MEDIUM", "HIGH", "URGENT"];
+
   // If not admin, only show user's own tickets
   if (req.user?.role !== "ADMIN") {
-    where.OR = [
-      { reporterId: req.user.id },
-      { assigneeId: req.user.id }
+    where.AND = [
+      {
+        OR: [
+          { reporterId: req.user.id },
+          { assigneeId: req.user.id },
+        ],
+      },
     ];
   }
 
-  if (search) {
-    where.OR = [
-      { title: { contains: search, mode: "insensitive" } },
-      { description: { contains: search, mode: "insensitive" } },
-    ];
+  if (search && typeof search === "string") {
+    const searchFilter = {
+      OR: [
+        { title: { contains: search, mode: "insensitive" } },
+        { description: { contains: search, mode: "insensitive" } },
+      ],
+    };
+    where.AND = where.AND ? [...where.AND, searchFilter] : [searchFilter];
   }
-  if (status) where.status = status;
-  if (priority) where.priority = priority;
+  if (status && validStatuses.includes(status as string)) where.status = status;
+  if (priority && validPriorities.includes(priority as string)) where.priority = priority;
 
   const tickets = await prisma.ticket.findMany({
     where,

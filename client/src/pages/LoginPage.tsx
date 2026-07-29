@@ -1,9 +1,6 @@
 import { useState, useEffect } from "react";
 import { authClient } from "../lib/auth-client";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/Skeleton";
 
 export default function LoginPage() {
   const { data: session, isPending } = authClient.useSession();
@@ -47,11 +44,8 @@ export default function LoginPage() {
 
   if (isPending) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-          <Skeleton width="40" height="2" className="text-muted-foreground text-sm" />
-        </div>
+      <div className="flex items-center justify-center min-h-screen bg-slate-50">
+        <div className="w-8 h-8 border-4 border-violet-600 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -59,83 +53,90 @@ export default function LoginPage() {
   if (session) return null;
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-100 to-slate-200">
-      <div className="w-full max-w-md px-4">
-        {/* Logo / Brand */}
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-violet-50 flex items-center justify-center px-4">
+      <div className="w-full max-w-sm">
+        {/* Brand */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary mb-4 shadow-lg">
-            <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-violet-600 mb-4 shadow-lg shadow-violet-200">
+            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-foreground">Help Desk</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            {view === "login" ? "Sign in to your account" : "Create a new account"}
+          <h1 className="text-xl font-bold text-slate-900">Help Desk</h1>
+          <p className="text-sm text-slate-500 mt-1">
+            {view === "login" ? "Sign in to your account" : "Create your account"}
           </p>
         </div>
 
         {/* Card */}
-        <div className="bg-white rounded-2xl shadow-xl p-8 border border-border">
-          <h2 className="text-xl font-semibold text-foreground mb-6">
+        <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/60 border border-slate-100 p-8">
+          <h2 className="text-lg font-semibold text-slate-900 mb-6">
             {view === "login" ? "Welcome back" : "Get started"}
           </h2>
 
           {error && (
-            <div className="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+            <div className="mb-5 flex items-start gap-2.5 p-3.5 rounded-xl bg-red-50 border border-red-100 text-red-700 text-sm">
+              <svg className="w-4 h-4 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
               {error}
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {view === "signup" && (
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground">Full Name</label>
-                <Input
-                  placeholder="John Doe"
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Full Name</label>
+                <input
+                  placeholder="Full Name"
                   value={name}
                   onChange={e => setName(e.target.value)}
                   required
+                  className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition"
                 />
               </div>
             )}
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">Email</label>
-              <Input
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Email</label>
+              <input
                 type="email"
-                placeholder="you@example.com"
+                placeholder="Email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 required
+                className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition"
               />
             </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">Password</label>
-              <Input
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">Password</label>
+              <input
                 type="password"
-                placeholder="••••••••"
+                placeholder="Password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 required
+                className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition"
               />
             </div>
-            <Button type="submit" className="w-full mt-2" disabled={loading}>
-              {loading ? (
-                <span className="flex items-center gap-2">
-                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  {view === "login" ? "Signing in..." : "Creating account..."}
-                </span>
-              ) : (
-                view === "login" ? "Sign in" : "Sign up"
-              )}
-            </Button>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full mt-1 py-2.5 px-4 bg-violet-600 hover:bg-violet-700 disabled:opacity-60 text-white text-sm font-semibold rounded-xl transition shadow-sm shadow-violet-200 flex items-center justify-center gap-2"
+            >
+              {loading && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+              {loading
+                ? (view === "login" ? "Signing in..." : "Creating account...")
+                : (view === "login" ? "Sign in" : "Sign up")}
+            </button>
           </form>
 
-          <p className="mt-6 text-center text-sm text-muted-foreground">
+          <p className="mt-6 text-center text-sm text-slate-500">
             {view === "login" ? "Don't have an account? " : "Already have an account? "}
             <button
               type="button"
               onClick={() => { setView(view === "login" ? "signup" : "login"); setError(""); }}
-              className="font-semibold text-primary hover:underline"
+              className="font-semibold text-violet-600 hover:text-violet-700 hover:underline transition"
             >
               {view === "login" ? "Sign up" : "Sign in"}
             </button>
