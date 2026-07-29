@@ -3,6 +3,7 @@ import { authClient } from "../lib/auth-client";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function LoginPage() {
   const { data: session, isPending } = authClient.useSession();
@@ -49,7 +50,7 @@ export default function LoginPage() {
       <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="flex flex-col items-center gap-3">
           <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-          <p className="text-muted-foreground text-sm">Loading...</p>
+          <Skeleton width="40" height="2" className="text-muted-foreground text-sm" />
         </div>
       </div>
     );

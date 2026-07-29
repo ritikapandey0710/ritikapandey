@@ -1,50 +1,56 @@
-import { authClient } from '../lib/auth-client';
 import { useQuery } from '@tanstack/react-query';
+import { authClient } from '../lib/auth-client';
 import { fetchUsers } from '../api';
-
-interface User {
-  id: string;
-  name: string | null;
-  email: string;
-  role: string;
-  createdAt: string; // ISO string
-}
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function UserPage() {
-  const { data: session, isPending } = authClient.useSession();
-
-  const { data: users, isLoading, error, isError } = useQuery<User[], Error>({
+  const { data: session, isPending: authPending } = authClient.useSession();
+  const { data: users, isLoading, error, isError } = useQuery({
     queryKey: ['users'],
     queryFn: fetchUsers,
-    enabled: !isPending && !!session
+    enabled: !authPending && !!session,
   });
 
-  if (isPending) {
+  // Redirect to login if not authenticated
+  if (authPending) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+          <Skeleton width="40" height="2" className="text-muted-foreground text-sm" />
+        </div>
       </div>
     );
   }
 
   if (!session) {
-    // This should be handled by AuthRoute, but just in case
-    return <p>Loading...</p>;
+    return null; // This will trigger a redirect in App.tsx
+  }
+
+  if (isError) {
+    return (
+      <div className="p-6">
+        <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 mb-6">
+          <p>Failed to load users: {error?.message || 'Unknown error'}</p>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6">
-      <div className="max-w-7xl mx-auto">
-        <h1 className="text-3xl font-bold text-center text-primary mb-8">
-          User Management Dashboard
-        </h1>
+    <div className="p-6">
+      <h1 className="text-2xl font-bold mb-6">User Management</h1>
 
-        {isError && error && (
-          <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 mb-6">
-            <p>{error.message}</p>
-          </div>
-        )}
-
+      {isLoading ? (
+        <div className="text-center py-8">
+          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+          <Skeleton width="40" height="2" className="text-muted-foreground text-sm" />
+        </div>
+      ) : users?.length === 0 ? (
+        <div className="text-center py-8">
+          <p className="text-muted-foreground">No users found</p>
+        </div>
+      ) : (
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
@@ -67,49 +73,35 @@ export default function UserPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {isLoading ? (
-                <tr>
-                  <td colSpan="5" className="px-6 py-4 text-center text-sm text-gray-500">
-                    Loading users...
+              {users.map((user) => (
+                <tr key={user.id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {user.id}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {user.name || '-'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {user.email}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                      user.role === 'ADMIN'
+                        ? 'bg-blue-100 text-blue-800'
+                        : 'bg-green-100 text-green-800'
+                    }`}>
+                      {user.role}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {new Date(user.createdAt).toLocaleString()}
                   </td>
                 </tr>
-              ) : users?.length === 0 ? (
-                <tr>
-                  <td colSpan="5" className="px-6 py-4 text-center text-sm text-gray-500">
-                    No users found
-                  </td>
-                </tr>
-              ) : (
-                users.map((user) => (
-                  <tr key={user.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {user.id}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {user.name || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {user.email}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        user.role === 'ADMIN'
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-green-100 text-green-800'
-                      }`}>
-                        {user.role}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(user.createdAt).toLocaleString()}
-                    </td>
-                  </tr>
-                ))
-              )}
+              ))}
             </tbody>
           </table>
         </div>
-      </div>
+      )}
     </div>
   );
 }

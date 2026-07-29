@@ -8,6 +8,7 @@ import { authClient } from './lib/auth-client'
 import Navbar from './components/Navbar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { AuthUser } from './types/user';
+import React from 'react';
 
 // Create a client instance
 const queryClient = new QueryClient();

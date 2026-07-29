@@ -1,6 +1,7 @@
 import { authClient } from '../lib/auth-client';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import type { AuthUser } from '@/types/user';
 
 export default function Navbar() {
@@ -23,15 +24,15 @@ export default function Navbar() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" />
               </svg>
             </div>
-            <span className="font-semibold text-foreground">Help Desk</span>
+            <Link to="/" className="font-semibold text-foreground hover:none">
+              Help Desk
+            </Link>
           </div>
           <div className="flex items-center gap-3">
             {/* Show placeholder while loading */}
-            <span className="text-sm text-muted-foreground hidden sm:block">
-              Loading...
-            </span>
+            <Skeleton width="20" height="2" className="text-sm text-muted-foreground hidden sm:block" />
             <Button variant="outline" size="sm" onClick={handleLogout}>
-              Loading...
+              <Skeleton width="20" height="2" className="text-sm text-muted-foreground" />
             </Button>
           </div>
         </div>
@@ -50,7 +51,9 @@ export default function Navbar() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" />
               </svg>
             </div>
-            <span className="font-semibold text-foreground">Help Desk</span>
+            <Link to="/" className="font-semibold text-foreground hover:none">
+              Help Desk
+            </Link>
           </div>
           <div className="flex items-center gap-3">
             <a
@@ -82,7 +85,9 @@ export default function Navbar() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" />
             </svg>
           </div>
-          <span className="font-semibold text-foreground">Help Desk</span>
+          <Link to="/" className="font-semibold text-foreground hover:none">
+            Help Desk
+          </Link>
         </div>
         <div className="flex items-center gap-4">
           <span className="text-sm text-muted-foreground hidden sm:block">
