@@ -1,5 +1,6 @@
 import { authClient } from '../lib/auth-client';
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { fetchUsers } from '../api';
 
 interface User {
   id: string;
@@ -11,35 +12,12 @@ interface User {
 
 export default function UserPage() {
   const { data: session, isPending } = authClient.useSession();
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (isPending || !session) return;
-
-    const fetchUsers = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const response = await fetch('/api/users', {
-          credentials: 'include', // Important to send cookies
-        });
-        if (!response.ok) {
-          throw new Error(`Failed to fetch users: ${response.status}`);
-        }
-        const data = await response.json();
-        setUsers(data);
-      } catch (err) {
-        console.error('Error fetching users:', err);
-        setError('Failed to load users');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchUsers();
-  }, [isPending, session]);
+  const { data: users, isLoading, error, isError } = useQuery<User[], Error>({
+    queryKey: ['users'],
+    queryFn: fetchUsers,
+    enabled: !isPending && !!session
+  });
 
   if (isPending) {
     return (
@@ -61,9 +39,9 @@ export default function UserPage() {
           User Management Dashboard
         </h1>
 
-        {error && (
+        {isError && error && (
           <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 mb-6">
-            <p>{error}</p>
+            <p>{error.message}</p>
           </div>
         )}
 
@@ -89,13 +67,13 @@ export default function UserPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {loading ? (
+              {isLoading ? (
                 <tr>
                   <td colSpan="5" className="px-6 py-4 text-center text-sm text-gray-500">
                     Loading users...
                   </td>
                 </tr>
-              ) : users.length === 0 ? (
+              ) : users?.length === 0 ? (
                 <tr>
                   <td colSpan="5" className="px-6 py-4 text-center text-sm text-gray-500">
                     No users found

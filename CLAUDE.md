@@ -36,6 +36,10 @@ This document provides context and guidelines for working on the AI‑powered ti
 - **DevOps**: Docker Compose (dev), Kubernetes / managed containers (prod), GitHub Actions CI/CD
 - **Observability**: Prometheus + Grafana, Loki, Sentry
 
+### Frontend Data Fetching
+- Use axios for making HTTP requests to the backend. A pre-configured axios instance is available in `client/src/api.ts`.
+- Use React Query (TanStack Query) for data fetching, caching, and state management. The QueryClientProvider is set up in `client/src/main.tsx`.
+
 ### Using Context7 for Up‑to‑Date Documentation
 
 The project has the **Context7** MCP server configured, allowing you to query the latest documentation for any library or tool directly from the chat.

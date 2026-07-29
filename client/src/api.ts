@@ -2,7 +2,15 @@
  * Simple API service for making requests to the backend
  */
 
+import axios from 'axios';
+
 const API_BASE_URL = "/api";
+
+// Create axios instance with default config
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  withCredentials: true, // Important for sending cookies with the request
+});
 
 export async function fetchTickets(params?: {
   search?: string;
@@ -15,21 +23,14 @@ export async function fetchTickets(params?: {
   if (params?.status) queryParams.append("status", params.status);
   if (params?.priority) queryParams.append("priority", params.priority);
 
-  const url = `${API_BASE_URL}/tickets${queryParams.toString() ? `?${queryParams}` : ""}`;
+  const url = `/tickets${queryParams.toString() ? `?${queryParams}` : ""}`;
 
   try {
-    const response = await fetch(url, {
-      credentials: "include" // Important for sending cookies with the request
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch tickets: ${response.status}`);
-    }
-
-    return await response.json();
-  } catch (error) {
+    const response = await api.get(url);
+    return response.data;
+  } catch (error: any) {
     console.error("Error fetching tickets:", error);
-    throw error;
+    throw new Error(`Failed to fetch tickets: ${error.response?.status || 'Unknown error'}`);
   }
 }
 
@@ -40,26 +41,18 @@ export async function createTicket(ticketData: {
   priority?: string;
   assigneeId?: string;
 }) {
-  const url = `${API_BASE_URL}/tickets`;
+  const url = `/tickets`;
 
   try {
-    const response = await fetch(url, {
-      method: "POST",
+    const response = await api.post(url, ticketData, {
       headers: {
         "Content-Type": "application/json",
       },
-      credentials: "include",
-      body: JSON.stringify(ticketData)
     });
-
-    if (!response.ok) {
-      throw new Error(`Failed to create ticket: ${response.status}`);
-    }
-
-    return await response.json();
-  } catch (error) {
+    return response.data;
+  } catch (error: any) {
     console.error("Error creating ticket:", error);
-    throw error;
+    throw new Error(`Failed to create ticket: ${error.response?.status || 'Unknown error'}`);
   }
 }
 
@@ -70,45 +63,39 @@ export async function updateTicket(id: string, ticketData: Partial<{
   priority?: string;
   assigneeId?: string;
 }>) {
-  const url = `${API_BASE_URL}/tickets/${id}`;
+  const url = `/tickets/${id}`;
 
   try {
-    const response = await fetch(url, {
-      method: "PATCH",
+    const response = await api.patch(url, ticketData, {
       headers: {
         "Content-Type": "application/json",
       },
-      credentials: "include",
-      body: JSON.stringify(ticketData)
     });
-
-    if (!response.ok) {
-      throw new Error(`Failed to update ticket: ${response.status}`);
-    }
-
-    return await response.json();
-  } catch (error) {
+    return response.data;
+  } catch (error: any) {
     console.error("Error updating ticket:", error);
-    throw error;
+    throw new Error(`Failed to update ticket: ${error.response?.status || 'Unknown error'}`);
   }
 }
 
 export async function deleteTicket(id: string) {
-  const url = `${API_BASE_URL}/tickets/${id}`;
+  const url = `/tickets/${id}`;
 
   try {
-    const response = await fetch(url, {
-      method: "DELETE",
-      credentials: "include"
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to delete ticket: ${response.status}`);
-    }
-
-    return await response.json();
-  } catch (error) {
+    const response = await api.delete(url);
+    return response.data;
+  } catch (error: any) {
     console.error("Error deleting ticket:", error);
-    throw error;
+    throw new Error(`Failed to delete ticket: ${error.response?.status || 'Unknown error'}`);
   }
+}
+
+// User management functions
+export async function fetchUsers() {
+  const response = await api.get('/users', {
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+  return response.data;
 }
