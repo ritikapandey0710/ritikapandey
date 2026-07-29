@@ -5,6 +5,7 @@ import rateLimit from "express-rate-limit";
 import { toNodeHandler } from "better-auth/node";
 import { auth } from "./auth";
 import ticketRouter from "./ticket.router";
+import userRouter from "./user.router";
 
 const requiredEnvVars = ["DATABASE_URL", "AUTH_SECRET"];
 for (const varName of requiredEnvVars) {
@@ -64,6 +65,20 @@ app.use("/api/tickets", async (req: Request, res: Response, next: NextFunction) 
 });
 
 app.use("/api/tickets", ticketRouter);
+
+// User routes (admin only)
+app.use("/api/users", userRouter);
+
+// 404 handler
+app.use((_req: Request, res: Response) => {
+  res.status(404).json({ error: "Not found" });
+});
+
+// Global error handler
+app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  console.error("Unhandled error:", err);
+  res.status(500).json({ error: "Internal server error" });
+});
 
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
