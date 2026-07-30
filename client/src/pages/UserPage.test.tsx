@@ -2,7 +2,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import UserPage from './UserPage';
 import { authClient } from '../lib/auth-client';
-import { fetchUsers } from '../api';
+import { fetchUsers, createUser } from '../api';
 import { renderWithQuery } from '../test/render-utils';
 
 // Mock modules
@@ -21,6 +21,7 @@ vi.mock('../api', async () => {
   return {
     ...actual,
     fetchUsers: vi.fn(),
+    createUser: vi.fn(),
   };
 });
 
@@ -42,6 +43,13 @@ const mockUsers = [
 ];
 
 describe('UserPage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Set default mock implementations
+    (fetchUsers as any).mockResolvedValue(mockUsers);
+    (createUser as any).mockResolvedValue({});
+  });
+
   it('should import UserPage', () => {
     expect(UserPage).toBeDefined();
   });
@@ -49,10 +57,6 @@ describe('UserPage', () => {
   it('should log UserPage', () => {
     console.log('UserPage:', UserPage);
     expect(UserPage).toBeDefined();
-  });
-
-  beforeEach(() => {
-    vi.clearAllMocks();
   });
 
   it('shows loading state when fetching users', async () => {
@@ -72,13 +76,11 @@ describe('UserPage', () => {
     // Check for loading state - verify that user data is not yet shown
     expect(
       screen.queryAllByText(/john doe/i).length === 0 &&
-      screen.queryAllByText(/jane smith/i).length === 0
+        screen.queryAllByText(/jane smith/i).length === 0
     ).toBe(true);
 
     // Should see the page title
-    expect(
-      screen.getByText(/user management/i)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/user management/i)).toBeInTheDocument();
   });
 
   it('displays error message when API call fails', async () => {
@@ -89,16 +91,12 @@ describe('UserPage', () => {
     });
 
     // Mock error state
-    (fetchUsers as any).mockRejectedValue(
-      new Error('Failed to load users')
-    );
+    (fetchUsers as any).mockRejectedValue(new Error('Failed to load users'));
 
     renderWithQuery(<UserPage />);
 
     // Wait for error message
-    expect(
-      await screen.findByText(/failed to load users/i)
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/failed to load users/i)).toBeInTheDocument();
   });
 
   it('renders user list when data is fetched successfully', async () => {
@@ -182,8 +180,164 @@ describe('UserPage', () => {
     renderWithQuery(<UserPage />);
 
     // Check for loading state - verify that the main content is not yet shown
-    expect(
-      screen.queryByText(/user management/i)
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/user management/i)).not.toBeInTheDocument();
+  });
+
+  // New tests for modal behavior
+  it('opens create user modal when button is clicked', async () => {
+    (authClient.useSession as any).mockReturnValue({
+      data: { user: { role: 'ADMIN', email: 'admin@example.com' } },
+      isPending: false,
+    });
+    (fetchUsers as any).mockResolvedValue(mockUsers);
+
+    renderWithQuery(<UserPage />);
+
+    // wait for users to load
+    await waitFor(() => expect(screen.getByText(/john@example.com/i)).toBeInTheDocument());
+
+    const createBtn = screen.getByRole('button', { name: /create user/i });
+    await userEvent.click(createBtn);
+
+    expect(screen.getByText(/create new user/i)).toBeInTheDocument();
+  });
+
+  it('closes create user modal when clicking outside', async () => {
+    (authClient.useSession as any).mockReturnValue({
+      data: { user: { role: 'ADMIN', email: 'admin@example.com' } },
+      isPending: false,
+    });
+    (fetchUsers as any).mockResolvedValue(mockUsers);
+
+    renderWithQuery(<UserPage />);
+
+    await waitFor(() => expect(screen.getByText(/john@example.com/i)).toBeInTheDocument());
+
+    const createBtn = screen.getByRole('button', { name: /create user/i });
+    await userEvent.click(createBtn);
+    expect(screen.getByText(/create new user/i)).toBeInTheDocument();
+
+    // Click on the backdrop to close the modal
+    const backdrop = screen.getByTestId('backdrop');
+    expect(backdrop).toBeInTheDocument();
+    await userEvent.click(backdrop);
+
+    // Wait for modal to close
+    await waitFor(() => {
+      expect(screen.queryByText(/create new user/i)).not.toBeInTheDocument();
+    });
+  });
+
+  it('closes create user modal when pressing escape key', async () => {
+    (authClient.useSession as any).mockReturnValue({
+      data: { user: { role: 'ADMIN', email: 'admin@example.com' } },
+      isPending: false,
+    });
+    (fetchUsers as any).mockResolvedValue(mockUsers);
+
+    renderWithQuery(<UserPage />);
+
+    await waitFor(() => expect(screen.getByText(/john@example.com/i)).toBeInTheDocument());
+
+    const createBtn = screen.getByRole('button', { name: /create user/i });
+    await userEvent.click(createBtn);
+    expect(screen.getByText(/create new user/i)).toBeInTheDocument();
+
+    await userEvent.keyboard({ key: 'Escape' });
+
+    // Wait for modal to close
+    await waitFor(() => {
+      expect(screen.queryByText(/create new user/i)).not.toBeInTheDocument();
+    });
+  });
+
+  // New tests for create user form
+  it('shows validation errors when form is submitted with invalid data', async () => {
+    (authClient.useSession as any).mockReturnValue({
+      data: { user: { role: 'ADMIN', email: 'admin@example.com' } },
+      isPending: false,
+    });
+    (fetchUsers as any).mockResolvedValue(mockUsers);
+    (createUser as any).mockResolvedValue({});
+
+    renderWithQuery(<UserPage />);
+
+    await waitFor(() => expect(screen.getByText(/john@example.com/i)).toBeInTheDocument());
+
+    const createBtn = screen.getByRole('button', { name: /create user/i });
+    await userEvent.click(createBtn);
+    expect(screen.getByText(/create new user/i)).toBeInTheDocument();
+
+    // Fill in invalid data
+    const nameInput = screen.getByPlaceholderText(/enter full name/i);
+    const emailInput = screen.getByPlaceholderText(/enter email address/i);
+    const passwordInput = screen.getByPlaceholderText(/min. 8 characters/i);
+
+    await userEvent.type(nameInput, 'Jo'); // too short
+    await userEvent.type(emailInput, 'invalid'); // invalid email
+    await userEvent.type(passwordInput, '1234567'); // too short
+
+    // Submit the form
+    const submitBtn = screen.getByRole('button', { name: /create user/i });
+    await userEvent.click(submitBtn);
+
+    // Check for validation errors
+    expect(await screen.findByText(/name must be at least 3 characters/i)).toBeInTheDocument();
+    expect(await screen.findByText(/invalid email address/i)).toBeInTheDocument();
+    expect(await screen.findByText(/password must be at least 8 characters/i)).toBeInTheDocument();
+  });
+
+  it('submits the form with valid data and calls onSuccess and closes modal', async () => {
+    (authClient.useSession as any).mockReturnValue({
+      data: { user: { role: 'ADMIN', email: 'admin@example.com' } },
+      isPending: false,
+    });
+    (fetchUsers as any).mockResolvedValue(mockUsers);
+    (createUser as any).mockResolvedValue({});
+
+    // Mock the queryClient's invalidateQueries method
+    const queryClient = {
+      invalidateQueries: vi.fn(),
+    };
+    // We need to mock the useQueryClient hook to return our mocked queryClient
+    vi.mock('@tanstack/react-query', () => ({
+      ...vi.importActual('@tanstack/react-query'),
+      useQueryClient: () => queryClient,
+    }));
+
+    renderWithQuery(<UserPage />);
+
+    await waitFor(() => expect(screen.getByText(/john@example.com/i)).toBeInTheDocument());
+
+    const createBtn = screen.getByRole('button', { name: /create user/i });
+    await userEvent.click(createBtn);
+    expect(screen.getByText(/create new user/i)).toBeInTheDocument();
+
+    // Fill in valid data
+    const nameInput = screen.getByPlaceholderText(/enter full name/i);
+    const emailInput = screen.getByPlaceholderText(/enter email address/i);
+    const passwordInput = screen.getByPlaceholderText(/min. 8 characters/i);
+
+    await userEvent.type(nameInput, 'John Doe');
+    await userEvent.type(emailInput, 'john@example.com');
+    await userEvent.type(passwordInput, 'password123');
+
+    // Submit the form
+    const submitBtn = screen.getByRole('button', { name: /create user/i });
+    await userEvent.click(submitBtn);
+
+    // Wait for modal to close
+    await waitFor(() => {
+      expect(screen.queryByText(/create new user/i)).not.toBeInTheDocument();
+    });
+
+    // Check that invalidateQueries was called with the correct key
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: ['users'] });
+    // Check that createUser was called
+    expect(createUser).toHaveBeenCalledWith({
+      name: 'John Doe',
+      email: 'john@example.com',
+      password: 'password123',
+    });
   });
 });

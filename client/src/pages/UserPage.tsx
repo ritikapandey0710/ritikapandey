@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { authClient } from '../lib/auth-client';
 import { fetchUsers, createUser } from '../api';
-import { useState } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -33,6 +33,27 @@ function CreateUserModal({
   });
 
   const [apiError, setApiError] = useState("");
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
 
   const onSubmit = async (data: z.infer<typeof schema>) => {
     setApiError("");
@@ -55,8 +76,8 @@ function CreateUserModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl shadow-slate-300/50 border border-slate-100">
+    <div data-testid="backdrop" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+      <div ref={modalRef} className="w-full max-w-md bg-white rounded-2xl shadow-2xl shadow-slate-300/50 border border-slate-100">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
           <h2 className="text-base font-semibold text-slate-900">Create New User</h2>
@@ -161,6 +182,7 @@ export default function UserPage() {
   });
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const handleClose = useCallback(() => setIsModalOpen(false), []);
 
   if (authPending) {
     return (
@@ -234,7 +256,7 @@ export default function UserPage() {
 
       <CreateUserModal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={handleClose}
         onSuccess={() => queryClient.invalidateQueries({ queryKey: ['users'] })}
       />
     </div>

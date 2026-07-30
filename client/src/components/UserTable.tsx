@@ -1,4 +1,4 @@
-import { AuthUser } from '@/types/user';
+import type { AuthUser } from '@/types/user';
 
 interface UserTableProps {
   users: AuthUser[] | null;

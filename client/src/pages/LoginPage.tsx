@@ -37,6 +37,8 @@ export default function LoginPage() {
         if (res.error) setError(res.error.message ?? "Sign in failed");
         else navigate("/");
       }
+    } catch (err: any) {
+      setError(err?.message?.includes('fetch') ? "Cannot connect to server. Make sure the backend is running." : (err?.message ?? "Something went wrong"));
     } finally {
       setLoading(false);
     }
@@ -83,7 +85,7 @@ export default function LoginPage() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} autoComplete="off" className="space-y-4">
             {view === "signup" && (
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">Full Name</label>
@@ -92,6 +94,7 @@ export default function LoginPage() {
                   value={name}
                   onChange={e => setName(e.target.value)}
                   required
+                  autoComplete="name"
                   className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition"
                 />
               </div>
@@ -104,6 +107,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 required
+                autoComplete={view === "signup" ? "new-email" : "email"}
                 className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition"
               />
             </div>
@@ -115,6 +119,7 @@ export default function LoginPage() {
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 required
+                autoComplete={view === "signup" ? "new-password" : "current-password"}
                 className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition"
               />
             </div>
@@ -135,7 +140,7 @@ export default function LoginPage() {
             {view === "login" ? "Don't have an account? " : "Already have an account? "}
             <button
               type="button"
-              onClick={() => { setView(view === "login" ? "signup" : "login"); setError(""); }}
+              onClick={() => { setView(view === "login" ? "signup" : "login"); setError(""); setName(""); setEmail(""); setPassword(""); }}
               className="font-semibold text-violet-600 hover:text-violet-700 hover:underline transition"
             >
               {view === "login" ? "Sign up" : "Sign in"}
