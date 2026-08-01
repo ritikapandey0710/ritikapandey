@@ -1,12 +1,15 @@
 import type { AuthUser } from '@/types/user';
+import { UserRole } from '@/types/role';
 
 interface UserTableProps {
   users: AuthUser[] | null;
+  currentUserId: string | null;
 
   onEdit: (user: AuthUser) => void;
+  onDelete: (userId: string, userName: string) => void;
 }
 
-export const UserTable = ({ users, onEdit }: UserTableProps) => {
+export const UserTable = ({ users, currentUserId, onEdit, onDelete }: UserTableProps) => {
   if (!users || users.length === 0) {
     // This component expects users to be non-null and have length > 0
     // The calling component should handle empty/loading states.
@@ -32,6 +35,9 @@ export const UserTable = ({ users, onEdit }: UserTableProps) => {
           <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
             Actions
           </th>
+          <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            Delete
+          </th>
         </tr>
       </thead>
       <tbody className="divide-y divide-slate-50">
@@ -48,7 +54,7 @@ export const UserTable = ({ users, onEdit }: UserTableProps) => {
             <td className="px-6 py-4 text-sm text-slate-600">{user.email}</td>
             <td className="px-6 py-4">
               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                user.role === 'ADMIN'
+                user.role === UserRole.ADMIN
                   ? 'bg-violet-100 text-violet-700'
                   : 'bg-emerald-100 text-emerald-700'
               }`}>
@@ -62,7 +68,7 @@ export const UserTable = ({ users, onEdit }: UserTableProps) => {
                 year: 'numeric',
               })}
             </td>
-            <td className="px-6 py-4 text-sm font-medium text-slate-500">
+            <td className="px-6 py-4 text-sm font-medium space-x-2">
               <button
                 onClick={() => onEdit(user)}
                 className="flex items-center gap-2 text-sm font-medium text-indigo-600 hover:text-indigo-900 transition"
@@ -73,6 +79,31 @@ export const UserTable = ({ users, onEdit }: UserTableProps) => {
                 </svg>
                 Edit
               </button>
+            </td>
+            <td className="px-6 py-4 text-sm font-medium">
+              {currentUserId && user.id !== currentUserId && (
+                <button
+                  onClick={() => onDelete(user.id, user.name || user.email)}
+                  className="flex items-center gap-2 text-sm font-medium text-red-600 hover:text-red-900 transition"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
+                  </svg>
+                  Delete
+                </button>
+              )}
+
+              {currentUserId && user.id === currentUserId && (
+                <button
+                  disabled
+                  className="flex items-center gap-2 text-sm font-medium text-slate-400 cursor-not-allowed"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
+                  </svg>
+                  Delete (self)
+                </button>
+              )}
             </td>
           </tr>
         ))}

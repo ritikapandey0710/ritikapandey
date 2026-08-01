@@ -121,6 +121,40 @@ For writing unit and integration tests for React components, we use Vitest and R
 4. Run the frontend: `bun run --workspace client dev`
 5. Open `http://localhost:5173` in your browser.
 
+### Using the UserRole Enum
+To ensure type safety and prevent magic strings when working with user roles, use the `UserRole` enum defined in `client/src/types/role.ts`:
+
+```typescript
+import { UserRole } from '@/types/role';
+
+// Usage examples:
+// Comparing roles
+if (user.role === UserRole.ADMIN) {
+  // Admin-specific logic
+}
+
+// In conditional rendering
+{user.role === UserRole.ADMIN && (
+  <AdminOnlyComponent />
+)}
+
+// In switch statements
+switch (user.role) {
+  case UserRole.ADMIN:
+    return <AdminView />;
+  case UserRole.AGENT:
+    return <AgentView />;
+  default:
+    return <DefaultView />;
+}
+```
+
+Available roles:
+- `UserRole.ADMIN` - Administrator with full access
+- `UserRole.AGENT` - Support agent with limited permissions
+
+This approach provides compile-time safety and prevents runtime errors from typos in role strings.
+
 ### Contributing
 - Follow the existing code style (ESLint + Prettier).
 - Write tests for new features.

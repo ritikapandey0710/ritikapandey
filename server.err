@@ -1,3 +1,1 @@
-$ bun run --cwd server dev
-$ bun run --watch src/index.ts
-^C^C^C
+error: Script not found "server"

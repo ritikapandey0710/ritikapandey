@@ -5,6 +5,7 @@ import { authClient } from '../lib/auth-client';
 import { fetchUsers, createUser, updateUser } from '../api';
 import { renderWithQuery } from '../test/render-utils';
 import { createTestQueryClient } from '../test/render-utils';
+import { UserRole } from '../types/role';
 
 // Mock modules
 vi.mock('../lib/auth-client', async () => {
@@ -30,14 +31,14 @@ const mockUsers = [
     id: '1',
     name: 'John Doe',
     email: 'john@example.com',
-    role: 'ADMIN',
+    role: UserRole.ADMIN,
     createdAt: '2023-01-01T00:00:00Z',
   },
   {
     id: '2',
     name: 'Jane Smith',
     email: 'jane@example.com',
-    role: 'AGENT',
+    role: UserRole.AGENT,
     createdAt: '2023-01-02T00:00:00Z',
   },
 ];
@@ -63,7 +64,7 @@ describe('UserPage', () => {
   it('shows loading state when fetching users', async () => {
     // Mock auth session
     (authClient.useSession as any).mockReturnValue({
-      data: { user: { role: 'ADMIN', email: 'admin@example.com' } },
+      data: { user: { role: UserRole.ADMIN, email: 'admin@example.com' } },
       isPending: false,
     });
 
@@ -87,7 +88,7 @@ describe('UserPage', () => {
   it('displays error message when API call fails', async () => {
     // Mock auth session
     (authClient.useSession as any).mockReturnValue({
-      data: { user: { role: 'ADMIN', email: 'admin@example.com' } },
+      data: { user: { role: UserRole.ADMIN, email: 'admin@example.com' } },
       isPending: false,
     });
 
@@ -124,7 +125,7 @@ describe('UserPage', () => {
   it('renders user list when data is fetched successfully', async () => {
     // Mock auth session
     (authClient.useSession as any).mockReturnValue({
-      data: { user: { role: 'ADMIN', email: 'admin@example.com' } },
+      data: { user: { role: UserRole.ADMIN, email: 'admin@example.com' } },
       isPending: false,
     });
 
@@ -154,7 +155,7 @@ describe('UserPage', () => {
   it('shows "No users found" when user list is empty', async () => {
     // Mock auth session
     (authClient.useSession as any).mockReturnValue({
-      data: { user: { role: 'ADMIN', email: 'admin@example.com' } },
+      data: { user: { role: UserRole.ADMIN, email: 'admin@example.com' } },
       isPending: false,
     });
 
@@ -197,7 +198,7 @@ describe('UserPage', () => {
   // New tests for modal behavior
   it('opens create user modal when button is clicked', async () => {
     (authClient.useSession as any).mockReturnValue({
-      data: { user: { role: 'ADMIN', email: 'admin@example.com' } },
+      data: { user: { role: UserRole.ADMIN, email: 'admin@example.com' } },
       isPending: false,
     });
     (fetchUsers as any).mockResolvedValue(mockUsers);
@@ -215,7 +216,7 @@ describe('UserPage', () => {
 
   it('closes create user modal when clicking outside', async () => {
     (authClient.useSession as any).mockReturnValue({
-      data: { user: { role: 'ADMIN', email: 'admin@example.com' } },
+      data: { user: { role: UserRole.ADMIN, email: 'admin@example.com' } },
       isPending: false,
     });
     (fetchUsers as any).mockResolvedValue(mockUsers);
@@ -241,7 +242,7 @@ describe('UserPage', () => {
 
   it('closes create user modal when pressing escape key', async () => {
     (authClient.useSession as any).mockReturnValue({
-      data: { user: { role: 'ADMIN', email: 'admin@example.com' } },
+      data: { user: { role: UserRole.ADMIN, email: 'admin@example.com' } },
       isPending: false,
     });
     (fetchUsers as any).mockResolvedValue(mockUsers);
@@ -265,7 +266,7 @@ describe('UserPage', () => {
   // New tests for create user form
   it('shows validation errors when form is submitted with invalid data', async () => {
     (authClient.useSession as any).mockReturnValue({
-      data: { user: { role: 'ADMIN', email: 'admin@example.com' } },
+      data: { user: { role: UserRole.ADMIN, email: 'admin@example.com' } },
       isPending: false,
     });
     (fetchUsers as any).mockResolvedValue(mockUsers);
@@ -300,7 +301,7 @@ describe('UserPage', () => {
 
   it('submits the form with valid data and calls onSuccess and closes modal', async () => {
     (authClient.useSession as any).mockReturnValue({
-      data: { user: { role: 'ADMIN', email: 'admin@example.com' } },
+      data: { user: { role: UserRole.ADMIN, email: 'admin@example.com' } },
       isPending: false,
     });
     (fetchUsers as any).mockResolvedValue(mockUsers);
@@ -350,7 +351,7 @@ describe('UserPage', () => {
   // New tests for edit user functionality
   it('opens edit user modal when edit button is clicked', async () => {
     (authClient.useSession as any).mockReturnValue({
-      data: { user: { role: 'ADMIN', email: 'admin@example.com' } },
+      data: { user: { role: UserRole.ADMIN, email: 'admin@example.com' } },
       isPending: false,
     });
     (fetchUsers as any).mockResolvedValue(mockUsers);
@@ -371,7 +372,7 @@ describe('UserPage', () => {
 
   it('closes edit user modal when clicking outside', async () => {
     (authClient.useSession as any).mockReturnValue({
-      data: { user: { role: 'ADMIN', email: 'admin@example.com' } },
+      data: { user: { role: UserRole.ADMIN, email: 'admin@example.com' } },
       isPending: false,
     });
     (fetchUsers as any).mockResolvedValue(mockUsers);
@@ -401,7 +402,7 @@ describe('UserPage', () => {
 
   it('closes edit user modal when pressing escape key', async () => {
     (authClient.useSession as any).mockReturnValue({
-      data: { user: { role: 'ADMIN', email: 'admin@example.com' } },
+      data: { user: { role: UserRole.ADMIN, email: 'admin@example.com' } },
       isPending: false,
     });
     (fetchUsers as any).mockResolvedValue(mockUsers);
@@ -428,7 +429,7 @@ describe('UserPage', () => {
 
   it('updates user with new name and email but keeps password when left blank', async () => {
     (authClient.useSession as any).mockReturnValue({
-      data: { user: { role: 'ADMIN', email: 'admin@example.com' } },
+      data: { user: { role: UserRole.ADMIN, email: 'admin@example.com' } },
       isPending: false,
     });
     (fetchUsers as any).mockResolvedValue(mockUsers);
@@ -480,7 +481,7 @@ describe('UserPage', () => {
 
   it('updates user password when provided', async () => {
     (authClient.useSession as any).mockReturnValue({
-      data: { user: { role: 'ADMIN', email: 'admin@example.com' } },
+      data: { user: { role: UserRole.ADMIN, email: 'admin@example.com' } },
       isPending: false,
     });
     (fetchUsers as any).mockResolvedValue(mockUsers);
@@ -530,7 +531,7 @@ describe('UserPage', () => {
 
   it('shows validation errors when editing user with invalid data', async () => {
     (authClient.useSession as any).mockReturnValue({
-      data: { user: { role: 'ADMIN', email: 'admin@example.com' } },
+      data: { user: { role: UserRole.ADMIN, email: 'admin@example.com' } },
       isPending: false,
     });
     (fetchUsers as any).mockResolvedValue(mockUsers);
@@ -568,7 +569,7 @@ describe('UserPage', () => {
 
   it('shows error message when updating user fails', async () => {
     (authClient.useSession as any).mockReturnValue({
-      data: { user: { role: 'ADMIN', email: 'admin@example.com' } },
+      data: { user: { role: UserRole.ADMIN, email: 'admin@example.com' } },
       isPending: false,
     });
     (fetchUsers as any).mockResolvedValue(mockUsers);

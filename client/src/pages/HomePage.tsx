@@ -2,6 +2,7 @@ import { authClient } from '../lib/auth-client';
 import { fetchTickets } from '../api';
 import { useQuery } from '@tanstack/react-query';
 import type { AuthUser } from '../types/user';
+import { UserRole } from '../types/role';
 
 export default function HomePage() {
   const { data: session, isPending } = authClient.useSession();
@@ -89,7 +90,7 @@ export default function HomePage() {
         <div className="relative overflow-hidden bg-gradient-to-r from-violet-600 to-indigo-600 rounded-2xl p-6 mb-8 shadow-lg shadow-violet-200">
           <div className="relative z-10">
             <div className="flex items-center gap-2 mb-1">
-              {user.role === "ADMIN" && (
+              {user.role === UserRole.ADMIN && (
                 <span className="px-2 py-0.5 bg-white/20 text-white text-xs font-semibold rounded-full">
                   Admin
                 </span>

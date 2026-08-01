@@ -5,6 +5,7 @@ import HomePage from './pages/HomePage';
 import UserPage from './pages/UserPage';
 import LoginPage from './pages/LoginPage';
 import type { AuthUser } from './types/user';
+import { UserRole } from './types/role';
 
 // Private route component to protect routes (requires authentication)
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -33,7 +34,7 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   if (!session) return <Navigate to="/login" replace />;
   const user = session.user as AuthUser;
   // If not admin, redirect to home
-  if (user.role !== "ADMIN") return <Navigate to="/" replace />;
+  if (user.role !== UserRole.ADMIN) return <Navigate to="/" replace />;
   return (
     <>
       <Navbar />

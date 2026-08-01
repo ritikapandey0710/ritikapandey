@@ -1,6 +1,7 @@
 import { authClient } from '../lib/auth-client';
 import { useNavigate, Link } from 'react-router-dom';
 import type { AuthUser } from '@/types/user';
+import { UserRole } from '@/types/role';
 
 export default function Navbar() {
   const { data: session, isPending } = authClient.useSession();
@@ -36,7 +37,7 @@ export default function Navbar() {
               >
                 Dashboard
               </Link>
-              {user.role === "ADMIN" && (
+              {user.role === UserRole.ADMIN && (
                 <Link
                   to="/user"
                   className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition font-medium"

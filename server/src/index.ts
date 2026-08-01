@@ -4,6 +4,7 @@ import cors from "cors";
 import rateLimit from "express-rate-limit";
 import { toNodeHandler } from "better-auth/node";
 import { auth } from "./auth";
+console.log("Auth object keys:", Object.keys(auth));
 import ticketRouter from "./ticket.router";
 import userRouter from "./modules/user/user.router";
 

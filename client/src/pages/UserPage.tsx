@@ -1,12 +1,13 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { authClient } from '../lib/auth-client';
-import { fetchUsers, createUser, updateUser } from '../api';
+import { fetchUsers, createUser, updateUser, deleteUser } from '../api';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import type { AuthUser } from '@/types/user';
 import { UserTable } from '../components/UserTable';
+import { DeleteUserModal } from '../components/DeleteUserModal';
 
 function UserModal({
   isOpen,
@@ -201,7 +202,7 @@ function UserModal({
                 errors.email ? "border-red-300 bg-red-50" : "border-slate-200"
               }`}
             />
-            {errors.email && <p className="mt-1 text-xs text-red-600>{errors.email.message}</p>}
+            {errors.email && <p className="mt-1 text-xs text-red-600">{errors.email.message}</p>}
           </div>
 
           <div>
@@ -216,11 +217,11 @@ function UserModal({
                 errors.password ? "border-red-300 bg-red-50" : "border-slate-200"
               }`}
             />
-            {errors.password && <p className="mt-1 text-xs text-red-600>{errors.password.message}</p>}
+            {errors.password && <p className="mt-1 text-xs text-red-600">{errors.password.message}</p>}
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slice-100">
+          <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-100">
             <button
               type="button"
               onClick={handleClose}
@@ -250,6 +251,7 @@ export default function UserPage() {
   const { data: session, isPending: authPending } = authClient.useSession();
   const enabled = !authPending && !!session;
   const [dialogState, setDialogState] = useState<{ open: false } | { open: true, mode: 'create' } | { open: true, mode: 'edit', user: AuthUser }>({ open: false });
+  const [deleteUserState, setDeleteUserState] = useState<{ open: false } | { open: true, userId: string; userName: string; loading: boolean }>({ open: false });
   const { data: users, isLoading, error, isError } = useQuery({
     queryKey: ['users'],
     queryFn: fetchUsers,
@@ -322,9 +324,16 @@ export default function UserPage() {
               <p className="text-xs text-slate-500 mt-1">Create your first user to get started</p>
             </div>
           ) : (
-            <UserTable users={users} onEdit={(user) => {
-              setDialogState({ open: true, mode: 'edit', user });
-            }} />
+            <UserTable
+              users={users}
+              currentUserId={session?.user?.id ?? null}
+              onEdit={(user) => {
+                setDialogState({ open: true, mode: 'edit', user });
+              }}
+              onDelete={(userId, userName) => {
+                setDeleteUserState({ open: true, userId, userName, loading: false });
+              }}
+            />
           )}
         </div>
 
@@ -350,6 +359,34 @@ export default function UserPage() {
               queryClient.invalidateQueries({ queryKey: ['users'] });
             }}
             user={dialogState.user}
+          />
+        )}
+
+        {deleteUserState.open && (
+          <DeleteUserModal
+            isOpen={true}
+            onClose={() => setDeleteUserState({ open: false })}
+            userId={deleteUserState.userId}
+            userName={deleteUserState.userName}
+            onConfirm={async () => {
+              try {
+                setDeleteUserState(prev => ({
+                  ...(prev as { open: true, userId: string; userName: string; loading: boolean }),
+                  loading: true
+                }));
+                await deleteUser(deleteUserState.userId);
+                setDeleteUserState({ open: false });
+                queryClient.invalidateQueries({ queryKey: ['users'] });
+              } catch (error) {
+                setDeleteUserState(prev => ({
+                  ...(prev as { open: true, userId: string; userName: string; loading: boolean }),
+                  loading: false
+                }));
+                // Error will be handled by the DeleteUserModal component
+                throw error;
+              }
+            }}
+            loading={((deleteUserState as { open: true, userId: string; userName: string; loading: boolean })?.loading ?? false)}
           />
         )}
       </div>
