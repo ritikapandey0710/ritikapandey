@@ -1,4 +1,4 @@
-import { defineConfig, mergeConfig } from 'vite'
+import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react-swc'
 import path from 'path'
 import { fileURLToPath } from 'url'
@@ -15,6 +15,7 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
+    extensions: ['.mjs', '.js', '.ts', '.jsx', '.tsx', '.json'],
   },
   server: {
     port: 5173,
@@ -33,6 +34,8 @@ export default defineConfig({
     setupFiles: './src/test/setup.ts',
     css: true,
     reporters: ['verbose'],
+    // Use tsconfig for path resolution in tests
+    tsconfig: './tsconfig.json',
     coverage: {
       reporter: ['text', 'json', 'html'],
       exclude: [

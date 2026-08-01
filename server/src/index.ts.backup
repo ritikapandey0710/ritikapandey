@@ -38,11 +38,11 @@ app.use((req, _res, next) => {
   next();
 });
 
-// Body parser MUST come BEFORE auth routes for JSON bodies to be parsed
-app.use(express.json());
+// Auth routes must come BEFORE express.json()
+app.all("/api/auth/*", toNodeHandler(auth));
 
-// Auth routes must come after body parser
-app.use("/api/auth", toNodeHandler(auth));
+// Body parser after auth
+app.use(express.json());
 
 app.get("/", (_req: Request, res: Response) => {
   res.json({ message: "Help Desk API" });

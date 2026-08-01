@@ -67,7 +67,11 @@ export async function createTicket(req: any, res: any) {
 
   if (!title) return res.status(400).json({ error: "Title is required" });
 
-  // Determine the reporter ID
+  const validStatuses = ["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"];
+  const validPriorities = ["LOW", "MEDIUM", "HIGH", "URGENT"];
+  if (status && !validStatuses.includes(status)) return res.status(400).json({ error: "Invalid status value" });
+  if (priority && !validPriorities.includes(priority)) return res.status(400).json({ error: "Invalid priority value" });
+
   let finalReporterId = reporterId;
   // If not admin, they can only create tickets for themselves
   if (req.user?.role !== "ADMIN") {
@@ -118,8 +122,16 @@ export async function updateTicket(req: any, res: any) {
   const data: any = {};
   if (title !== undefined) data.title = title;
   if (description !== undefined) data.description = description;
-  if (status !== undefined) data.status = status;
-  if (priority !== undefined) data.priority = priority;
+  const validStatuses = ["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"];
+  const validPriorities = ["LOW", "MEDIUM", "HIGH", "URGENT"];
+  if (status !== undefined) {
+    if (!validStatuses.includes(status)) return res.status(400).json({ error: "Invalid status value" });
+    data.status = status;
+  }
+  if (priority !== undefined) {
+    if (!validPriorities.includes(priority)) return res.status(400).json({ error: "Invalid priority value" });
+    data.priority = priority;
+  }
   if (assigneeId !== undefined) data.assigneeId = assigneeId;
 
   const ticket = await prisma.ticket.update({

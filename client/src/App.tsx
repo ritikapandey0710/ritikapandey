@@ -54,6 +54,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/signup" element={<LoginPage />} />
       <Route path="/" element={<PrivateRoute><HomePage /></PrivateRoute>} />
       <Route path="/user" element={<AdminRoute><UserPage /></AdminRoute>} />
       <Route path="*" element={<Navigate to={session ? "/" : "/login"} replace />} />

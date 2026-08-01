@@ -140,7 +140,7 @@ export default function LoginPage() {
             {view === "login" ? "Don't have an account? " : "Already have an account? "}
             <button
               type="button"
-              onClick={() => { setView(view === "login" ? "signup" : "login"); setError(""); setName(""); setEmail(""); setPassword(""); }}
+              onClick={() => { navigate(view === "login" ? "/signup" : "/login"); setError(""); setName(""); setEmail(""); setPassword(""); }}
               className="font-semibold text-violet-600 hover:text-violet-700 hover:underline transition"
             >
               {view === "login" ? "Sign up" : "Sign in"}

@@ -2,9 +2,11 @@ import type { AuthUser } from '@/types/user';
 
 interface UserTableProps {
   users: AuthUser[] | null;
+
+  onEdit: (user: AuthUser) => void;
 }
 
-export const UserTable = ({ users }: UserTableProps) => {
+export const UserTable = ({ users, onEdit }: UserTableProps) => {
   if (!users || users.length === 0) {
     // This component expects users to be non-null and have length > 0
     // The calling component should handle empty/loading states.
@@ -26,6 +28,9 @@ export const UserTable = ({ users }: UserTableProps) => {
           </th>
           <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
             Joined
+          </th>
+          <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            Actions
           </th>
         </tr>
       </thead>
@@ -56,6 +61,18 @@ export const UserTable = ({ users }: UserTableProps) => {
                 day: 'numeric',
                 year: 'numeric',
               })}
+            </td>
+            <td className="px-6 py-4 text-sm font-medium text-slate-500">
+              <button
+                onClick={() => onEdit(user)}
+                className="flex items-center gap-2 text-sm font-medium text-indigo-600 hover:text-indigo-900 transition"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4-1 1-4 9.5-9.5z"/>
+                </svg>
+                Edit
+              </button>
             </td>
           </tr>
         ))}

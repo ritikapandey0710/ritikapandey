@@ -1,25 +1,40 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { authClient } from '../lib/auth-client';
-import { fetchUsers, createUser } from '../api';
+import { fetchUsers, createUser, updateUser } from '../api';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { UserTable } from '@/components/UserTable';
+import type { AuthUser } from '@/types/user';
+import { UserTable } from '../components/UserTable';
 
-function CreateUserModal({
+function UserModal({
   isOpen,
   onClose,
   onSuccess,
+  user, // If provided, edit mode; if null/undefined, create mode
 }: {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  user: AuthUser | null | undefined;
 }) {
+  const isEditMode = !!user;
   const schema = z.object({
-    name: z.string().min(3, "Name must be at least 3 characters"),
+    name: z.string().trim().min(3, "Name must be at least 3 characters"),
     email: z.string().email("Invalid email address"),
-    password: z.string().min(8, "Password must be at least 8 characters"),
+    password: z
+      .union([
+        z.string().min(8, "Password must be at least 8 characters"),
+        z.literal(""),
+      ])
+      .optional()
+      .transform((val) => {
+        if (val === "") {
+          return undefined;
+        }
+        return val;
+      }),
   });
 
   const {
@@ -29,7 +44,11 @@ function CreateUserModal({
     reset,
   } = useForm({
     resolver: zodResolver(schema),
-    defaultValues: { name: "", email: "", password: "" },
+    defaultValues: {
+      name: user?.name ?? "",
+      email: user?.email ?? "",
+      password: ""
+    },
   });
 
   const [apiError, setApiError] = useState("");
@@ -58,12 +77,66 @@ function CreateUserModal({
   const onSubmit = async (data: z.infer<typeof schema>) => {
     setApiError("");
     try {
-      await createUser(data);
+      if (isEditMode) {
+        // Edit mode
+        // Validate user exists
+        if (!user) {
+          setApiError("Invalid user");
+          return;
+        }
+
+        // Validate user has an ID that's not null or undefined
+        if (user.id === null || user.id === undefined) {
+          setApiError("Invalid user ID");
+          return;
+        }
+
+        // Convert ID to string to handle both string and number IDs
+        const userId = String(user.id);
+        if (!userId || userId.trim() === "") {
+          setApiError("Invalid user ID");
+          return;
+        }
+
+        // Prepare update data - only include fields that have values
+        const updatePayload = {
+          name: data.name.trim(),
+          email: data.email.toLowerCase().trim(),
+        };
+
+        // Only include password if it's provided and meets requirements
+        if (data.password && data.password.trim().length >= 8) {
+          // @ts-expect-error - We know this is safe because we checked the length above
+          updatePayload.password = data.password;
+        }
+
+        // Double-check that we have a valid object (defensive programming)
+        if (typeof updatePayload !== 'object' || updatePayload === null || Array.isArray(updatePayload)) {
+          throw new Error('Internal error: failed to create update payload');
+        }
+
+        await updateUser(userId, updatePayload);
+      } else {
+        // Create mode
+        await createUser(data);
+      }
+
       reset();
       onSuccess();
       onClose();
     } catch (err: any) {
-      setApiError(err.response?.data?.error || "Failed to create user");
+      console.error('User operation error:', err); // Add logging for debugging
+      if (err.response) {
+        // The request was made and the server responded with a status code
+        // that falls out of the range of 2xx
+        setApiError(err.response.data?.error || `Server error: ${err.response.status}`);
+      } else if (err.request) {
+        // The request was made but no response was received
+        setApiError('Network error - please try again');
+      } else {
+        // Something happened in setting up the request that triggered an Error
+        setApiError('Request setup error: ' + err.message);
+      }
     }
   };
 
@@ -80,7 +153,7 @@ function CreateUserModal({
       <div ref={modalRef} className="w-full max-w-md bg-white rounded-2xl shadow-2xl shadow-slate-300/50 border border-slate-100">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-          <h2 className="text-base font-semibold text-slate-900">Create New User</h2>
+          <h2 className="text-base font-semibold text-slate-900">{isEditMode ? "Edit User" : "Create New User"}</h2>
           <button
             onClick={handleClose}
             className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
@@ -128,12 +201,12 @@ function CreateUserModal({
                 errors.email ? "border-red-300 bg-red-50" : "border-slate-200"
               }`}
             />
-            {errors.email && <p className="mt-1 text-xs text-red-600">{errors.email.message}</p>}
+            {errors.email && <p className="mt-1 text-xs text-red-600>{errors.email.message}</p>}
           </div>
 
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">
-              Password
+              {isEditMode ? "Password (leave blank to keep current)" : "Password"}
             </label>
             <input
               {...register("password")}
@@ -143,11 +216,11 @@ function CreateUserModal({
                 errors.password ? "border-red-300 bg-red-50" : "border-slate-200"
               }`}
             />
-            {errors.password && <p className="mt-1 text-xs text-red-600">{errors.password.message}</p>}
+            {errors.password && <p className="mt-1 text-xs text-red-600>{errors.password.message}</p>}
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-100">
+          <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slice-100">
             <button
               type="button"
               onClick={handleClose}
@@ -163,7 +236,7 @@ function CreateUserModal({
               {isSubmitting ? (
                 <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
               ) : (
-                "Create User"
+                isEditMode ? "Save Changes" : "Create User"
               )}
             </button>
           </div>
@@ -175,14 +248,14 @@ function CreateUserModal({
 
 export default function UserPage() {
   const { data: session, isPending: authPending } = authClient.useSession();
+  const enabled = !authPending && !!session;
+  const [dialogState, setDialogState] = useState<{ open: false } | { open: true, mode: 'create' } | { open: true, mode: 'edit', user: AuthUser }>({ open: false });
   const { data: users, isLoading, error, isError } = useQuery({
     queryKey: ['users'],
     queryFn: fetchUsers,
-    enabled: !authPending && !!session,
+    enabled,
   });
   const queryClient = useQueryClient();
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const handleClose = useCallback(() => setIsModalOpen(false), []);
 
   if (authPending) {
     return (
@@ -199,7 +272,7 @@ export default function UserPage() {
       <div className="max-w-6xl mx-auto px-6 py-8">
         <div className="flex items-start gap-3 p-4 rounded-xl bg-red-50 border border-red-100 text-red-700 text-sm">
           <svg className="w-5 h-5 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 001.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
           </svg>
           Failed to load users: {error?.message || 'Unknown error'}
         </div>
@@ -220,7 +293,7 @@ export default function UserPage() {
             </p>
           </div>
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={() => setDialogState({ open: true, mode: 'create' })}
             className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-violet-600 hover:bg-violet-700 rounded-xl transition shadow-sm shadow-violet-200"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -249,16 +322,37 @@ export default function UserPage() {
               <p className="text-xs text-slate-500 mt-1">Create your first user to get started</p>
             </div>
           ) : (
-            <UserTable users={users} />
+            <UserTable users={users} onEdit={(user) => {
+              setDialogState({ open: true, mode: 'edit', user });
+            }} />
           )}
         </div>
-      </div>
 
-      <CreateUserModal
-        isOpen={isModalOpen}
-        onClose={handleClose}
-        onSuccess={() => queryClient.invalidateQueries({ queryKey: ['users'] })}
-      />
+        {/* Modal */}
+        {dialogState.open && dialogState.mode === 'create' && (
+          <UserModal
+            isOpen={true}
+            onClose={() => setDialogState({ open: false })}
+            onSuccess={() => {
+              setDialogState({ open: false });
+              queryClient.invalidateQueries({ queryKey: ['users'] });
+            }}
+            user={null}
+          />
+        )}
+
+        {dialogState.open && dialogState.mode === 'edit' && (
+          <UserModal
+            isOpen={true}
+            onClose={() => setDialogState({ open: false })}
+            onSuccess={() => {
+              setDialogState({ open: false });
+              queryClient.invalidateQueries({ queryKey: ['users'] });
+            }}
+            user={dialogState.user}
+          />
+        )}
+      </div>
     </div>
   );
 }

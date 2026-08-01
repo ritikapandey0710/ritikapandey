@@ -1,0 +1,10 @@
+﻿bun test v1.3.14 (0d9b296a)
+bun.exe : error: 0 test files matching **{.test,.spec,_test_,_spec_}.{js,ts,jsx,tsx} in 
+--cwd="C:\Users\ritik\OneDrive\Desktop\help desk\client\client"
+At C:\Users\ritik\AppData\Roaming\npm\bun.ps1:14 char:3
++   & "$basedir/node_modules/bun/bin/bun.exe"   $args
++   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (error: 0 test f...\client\client":String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+

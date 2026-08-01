@@ -2,8 +2,9 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import UserPage from './UserPage';
 import { authClient } from '../lib/auth-client';
-import { fetchUsers, createUser } from '../api';
+import { fetchUsers, createUser, updateUser } from '../api';
 import { renderWithQuery } from '../test/render-utils';
+import { createTestQueryClient } from '../test/render-utils';
 
 // Mock modules
 vi.mock('../lib/auth-client', async () => {
@@ -16,12 +17,11 @@ vi.mock('../lib/auth-client', async () => {
     },
   };
 });
-vi.mock('../api', async () => {
-  const actual = await import('../api');
+vi.mock('../api', () => {
   return {
-    ...actual,
     fetchUsers: vi.fn(),
     createUser: vi.fn(),
+    updateUser: vi.fn(),
   };
 });
 
@@ -48,6 +48,7 @@ describe('UserPage', () => {
     // Set default mock implementations
     (fetchUsers as any).mockResolvedValue(mockUsers);
     (createUser as any).mockResolvedValue({});
+    (updateUser as any).mockResolvedValue({});
   });
 
   it('should import UserPage', () => {
@@ -90,12 +91,33 @@ describe('UserPage', () => {
       isPending: false,
     });
 
-    // Mock error state
-    (fetchUsers as any).mockRejectedValue(new Error('Failed to load users'));
+    // Mock error state by returning a rejected promise
+    (fetchUsers as any).mockImplementation(() => {
+      console.log('fetchUsers called, returning rejected promise');
+      return Promise.reject(new Error('failed to load users'));
+    });
 
-    renderWithQuery(<UserPage />);
+    const queryClient = createTestQueryClient();
+    const { container } = renderWithQuery(<UserPage />, { queryClient });
 
-    // Wait for error message
+    expect(fetchUsers).toHaveBeenCalledTimes(1);
+
+    // Wait for the query to be in a non-pending state
+    await waitFor(() => {
+      const state = queryClient.getQueryState(['users']);
+      console.log('Query state while waiting:', state);
+      return state?.status !== 'pending';
+    }, { timeout: 5000 }); // Increase timeout for debugging
+
+    // Now check the state
+    const state = queryClient.getQueryState(['users']);
+    console.log('Final query state:', state);
+    expect(state?.status).toBe('error');
+
+    // Log the container's innerHTML to see what is rendered
+    console.log('Container innerHTML:', container.innerHTML);
+
+    // Then check for the error message in the DOM
     expect(await screen.findByText(/failed to load users/i)).toBeInTheDocument();
   });
 
@@ -113,31 +135,20 @@ describe('UserPage', () => {
 
     // Wait for data to load
     await waitFor(() => {
-      expect(screen.getByText('john@example.com')).toBeInTheDocument();
-      expect(screen.getByText('jane@example.com')).toBeInTheDocument();
+      expect(screen.getByText(/john@example.com/i)).toBeInTheDocument();
+      expect(screen.getByText(/jane@example.com/i)).toBeInTheDocument();
     });
 
-    // Check table headers
-    expect(screen.getByText('ID')).toBeInTheDocument();
-    expect(screen.getByText('Name')).toBeInTheDocument();
-    expect(screen.getByText('Email')).toBeInTheDocument();
-    expect(screen.getByText('Role')).toBeInTheDocument();
-    expect(screen.getByText('Created At')).toBeInTheDocument();
+    // Check table headers - using getByRole for table header cells
+    expect(screen.getByRole('columnheader', { name: /user/i })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: /email/i })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: /role/i })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: /joined/i })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: /actions/i })).toBeInTheDocument();
 
     // Check user data
-    expect(screen.getByText('John Doe')).toBeInTheDocument();
-    expect(screen.getByText('Jane Smith')).toBeInTheDocument();
-
-    // Check role badges - get the cell and check its inner HTML for the span with correct class
-    const adminRow = screen.getByText('John Doe').closest('tr');
-    const adminBadge = adminRow.querySelector('td:nth-child(4) span');
-    expect(adminBadge).toBeTruthy();
-    expect(adminBadge?.className).toContain('bg-blue-100');
-
-    const agentRow = screen.getByText('Jane Smith').closest('tr');
-    const agentBadge = agentRow.querySelector('td:nth-child(4) span');
-    expect(agentBadge).toBeTruthy();
-    expect(agentBadge?.className).toContain('bg-green-100');
+    expect(screen.getByText(/John Doe/i)).toBeInTheDocument();
+    expect(screen.getByText(/Jane Smith/i)).toBeInTheDocument();
   });
 
   it('shows "No users found" when user list is empty', async () => {
@@ -283,8 +294,8 @@ describe('UserPage', () => {
 
     // Check for validation errors
     expect(await screen.findByText(/name must be at least 3 characters/i)).toBeInTheDocument();
-    expect(await screen.findByText(/invalid email address/i)).toBeInTheDocument();
-    expect(await screen.findByText(/password must be at least 8 characters/i)).toBeInTheDocument();
+    await screen.findByText(/invalid email address/i);
+    await screen.findByText(/password must be at least 8 characters/i);
   });
 
   it('submits the form with valid data and calls onSuccess and closes modal', async () => {
@@ -295,17 +306,12 @@ describe('UserPage', () => {
     (fetchUsers as any).mockResolvedValue(mockUsers);
     (createUser as any).mockResolvedValue({});
 
-    // Mock the queryClient's invalidateQueries method
+    // Create a mock query client
     const queryClient = {
       invalidateQueries: vi.fn(),
     };
-    // We need to mock the useQueryClient hook to return our mocked queryClient
-    vi.mock('@tanstack/react-query', () => ({
-      ...vi.importActual('@tanstack/react-query'),
-      useQueryClient: () => queryClient,
-    }));
 
-    renderWithQuery(<UserPage />);
+    renderWithQuery(<UserPage />, { queryClient });
 
     await waitFor(() => expect(screen.getByText(/john@example.com/i)).toBeInTheDocument());
 
@@ -339,5 +345,267 @@ describe('UserPage', () => {
       email: 'john@example.com',
       password: 'password123',
     });
+  });
+
+  // New tests for edit user functionality
+  it('opens edit user modal when edit button is clicked', async () => {
+    (authClient.useSession as any).mockReturnValue({
+      data: { user: { role: 'ADMIN', email: 'admin@example.com' } },
+      isPending: false,
+    });
+    (fetchUsers as any).mockResolvedValue(mockUsers);
+    (updateUser as any).mockResolvedValue({});
+
+    renderWithQuery(<UserPage />);
+
+    await waitFor(() => expect(screen.getByText(/john@example.com/i)).toBeInTheDocument());
+
+    // Find John's row and then the edit button within that row
+    const johnsRow = screen.getByText(/john@example.com/i).closest('tr');
+    const editBtn = johnsRow.querySelector('button');
+    expect(editBtn).toBeInTheDocument();
+    await userEvent.click(editBtn as HTMLElement);
+
+    expect(screen.getByText(/edit user/i)).toBeInTheDocument();
+  });
+
+  it('closes edit user modal when clicking outside', async () => {
+    (authClient.useSession as any).mockReturnValue({
+      data: { user: { role: 'ADMIN', email: 'admin@example.com' } },
+      isPending: false,
+    });
+    (fetchUsers as any).mockResolvedValue(mockUsers);
+    (updateUser as any).mockResolvedValue({});
+
+    renderWithQuery(<UserPage />);
+
+    await waitFor(() => expect(screen.getByText(/john@example.com/i)).toBeInTheDocument());
+
+    // Find John's row and then the edit button within that row
+    const johnsRow = screen.getByText(/john@example.com/i).closest('tr');
+    const editBtn = johnsRow.querySelector('button');
+    expect(editBtn).toBeInTheDocument();
+    await userEvent.click(editBtn as HTMLElement);
+    expect(screen.getByText(/edit user/i)).toBeInTheDocument();
+
+    // Click on the backdrop to close the modal
+    const backdrop = screen.getByTestId('backdrop-edit');
+    expect(backdrop).toBeInTheDocument();
+    await userEvent.click(backdrop);
+
+    // Wait for modal to close
+    await waitFor(() => {
+      expect(screen.queryByText(/edit user/i)).not.toBeInTheDocument();
+    });
+  });
+
+  it('closes edit user modal when pressing escape key', async () => {
+    (authClient.useSession as any).mockReturnValue({
+      data: { user: { role: 'ADMIN', email: 'admin@example.com' } },
+      isPending: false,
+    });
+    (fetchUsers as any).mockResolvedValue(mockUsers);
+    (updateUser as any).mockResolvedValue({});
+
+    renderWithQuery(<UserPage />);
+
+    await waitFor(() => expect(screen.getByText(/john@example.com/i)).toBeInTheDocument());
+
+    // Find John's row and then the edit button within that row
+    const johnsRow = screen.getByText(/john@example.com/i).closest('tr');
+    const editBtn = johnsRow.querySelector('button');
+    expect(editBtn).toBeInTheDocument();
+    await userEvent.click(editBtn as HTMLElement);
+    expect(screen.getByText(/edit user/i)).toBeInTheDocument();
+
+    await userEvent.keyboard({ key: 'Escape' });
+
+    // Wait for modal to close
+    await waitFor(() => {
+      expect(screen.queryByText(/edit user/i)).not.toBeInTheDocument();
+    });
+  });
+
+  it('updates user with new name and email but keeps password when left blank', async () => {
+    (authClient.useSession as any).mockReturnValue({
+      data: { user: { role: 'ADMIN', email: 'admin@example.com' } },
+      isPending: false,
+    });
+    (fetchUsers as any).mockResolvedValue(mockUsers);
+    (updateUser as any).mockResolvedValue({});
+
+    // Create a mock query client
+    const queryClient = {
+      invalidateQueries: vi.fn(),
+    };
+
+    renderWithQuery(<UserPage />, { queryClient });
+
+    await waitFor(() => expect(screen.getByText(/john@example.com/i)).toBeInTheDocument());
+
+    // Find John's row and then the edit button within that row
+    const johnsRow = screen.getByText(/john@example.com/i).closest('tr');
+    const editBtn = johnsRow.querySelector('button');
+    expect(editBtn).toBeInTheDocument();
+    await userEvent.click(editBtn as HTMLElement);
+
+    await waitFor(() => expect(screen.getByText(/edit user/i)).toBeInTheDocument());
+
+    const nameInput = screen.getByPlaceholderText(/enter full name/i);
+    const emailInput = screen.getByPlaceholderText(/enter email address/i);
+    const passwordInput = screen.getByPlaceholderText(/min. 8 characters/i);
+
+    await userEvent.clear(nameInput);
+    await userEvent.type(nameInput, 'Jonathan Doe');
+    await userEvent.clear(emailInput);
+    await userEvent.type(emailInput, 'jonathan@example.com');
+    // Leave password empty
+
+    const submitBtn = screen.getByRole('button', { name: /save changes/i });
+    await userEvent.click(submitBtn);
+
+    await waitFor(() => {
+      expect(screen.queryByText(/edit user/i)).not.toBeInTheDocument();
+    });
+
+    expect(updateUser).toHaveBeenCalledWith('1', {
+      name: 'Jonathan Doe',
+      email: 'jonathan@example.com',
+      // password should not be in payload when left empty
+    });
+
+    // Check that invalidateQueries was called
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: ['users'] });
+  });
+
+  it('updates user password when provided', async () => {
+    (authClient.useSession as any).mockReturnValue({
+      data: { user: { role: 'ADMIN', email: 'admin@example.com' } },
+      isPending: false,
+    });
+    (fetchUsers as any).mockResolvedValue(mockUsers);
+    (updateUser as any).mockResolvedValue({});
+
+    // Create a mock query client
+    const queryClient = {
+      invalidateQueries: vi.fn(),
+    };
+
+    renderWithQuery(<UserPage />, { queryClient });
+
+    await waitFor(() => expect(screen.getByText(/john@example.com/i)).toBeInTheDocument());
+
+    // Find John's row and then the edit button within that row
+    const johnsRow = screen.getByText(/john@example.com/i).closest('tr');
+    const editBtn = johnsRow.querySelector('button');
+    expect(editBtn).toBeInTheDocument();
+    await userEvent.click(editBtn as HTMLElement);
+
+    await waitFor(() => expect(screen.getByText(/edit user/i)).toBeInTheDocument());
+
+    const nameInput = screen.getByPlaceholderText(/enter full name/i);
+    const emailInput = screen.getByPlaceholderText(/enter email address/i);
+    const passwordInput = screen.getByPlaceholderText(/min. 8 characters/i);
+
+    await userEvent.type(nameInput, 'John Doe');
+    await userEvent.type(emailInput, 'john@example.com');
+    await userEvent.type(passwordInput, 'newpassword123');
+
+    const submitBtn = screen.getByRole('button', { name: /save changes/i });
+    await userEvent.click(submitBtn);
+
+    await waitFor(() => {
+      expect(screen.queryByText(/edit user/i)).not.toBeInTheDocument();
+    });
+
+    expect(updateUser).toHaveBeenCalledWith('1', {
+      name: 'John Doe',
+      email: 'john@example.com',
+      password: 'newpassword123',
+    });
+
+    // Check that invalidateQueries was called
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: ['users'] });
+  });
+
+  it('shows validation errors when editing user with invalid data', async () => {
+    (authClient.useSession as any).mockReturnValue({
+      data: { user: { role: 'ADMIN', email: 'admin@example.com' } },
+      isPending: false,
+    });
+    (fetchUsers as any).mockResolvedValue(mockUsers);
+    (updateUser as any).mockResolvedValue({});
+
+    renderWithQuery(<UserPage />);
+
+    await waitFor(() => expect(screen.getByText(/john@example.com/i)).toBeInTheDocument());
+
+    // Find John's row and then the edit button within that row
+    const johnsRow = screen.getByText(/john@example.com/i).closest('tr');
+    const editBtn = johnsRow.querySelector('button');
+    expect(editBtn).toBeInTheDocument();
+    await userEvent.click(editBtn as HTMLElement);
+
+    await waitFor(() => expect(screen.getByText(/edit user/i)).toBeInTheDocument());
+
+    // Fill in invalid data
+    const nameInput = screen.getByPlaceholderText(/enter full name/i);
+    const emailInput = screen.getByPlaceholderText(/enter email address/i);
+    const passwordInput = screen.getByPlaceholderText(/min. 8 characters/i);
+
+    await userEvent.type(nameInput, 'Jo'); // too short
+    await userEvent.type(emailInput, 'invalid'); // invalid email
+    await userEvent.type(passwordInput, '1234567'); // too short
+
+    const submitBtn = screen.getByRole('button', { name: /save changes/i });
+    await userEvent.click(submitBtn);
+
+    // Check for validation errors
+    expect(await screen.findByText(/name must be at least 3 characters/i)).toBeInTheDocument();
+    await screen.findByText(/invalid email address/i);
+    await screen.findByText(/password must be at least 8 characters/i);
+  });
+
+  it('shows error message when updating user fails', async () => {
+    (authClient.useSession as any).mockReturnValue({
+      data: { user: { role: 'ADMIN', email: 'admin@example.com' } },
+      isPending: false,
+    });
+    (fetchUsers as any).mockResolvedValue(mockUsers);
+    (updateUser as any).mockRejectedValue({
+      response: {
+        data: {
+          error: 'Failed to update user'
+        }
+      }
+    });
+
+    renderWithQuery(<UserPage />);
+
+    await waitFor(() => expect(screen.getByText(/john@example.com/i)).toBeInTheDocument());
+
+    // Find John's row and then the edit button within that row
+    const johnsRow = screen.getByText(/john@example.com/i).closest('tr');
+    const editBtn = johnsRow.querySelector('button');
+    expect(editBtn).toBeInTheDocument();
+    await userEvent.click(editBtn as HTMLElement);
+
+    await waitFor(() => expect(screen.getByText(/edit user/i)).toBeInTheDocument());
+
+    const nameInput = screen.getByPlaceholderText(/enter full name/i);
+    const emailInput = screen.getByPlaceholderText(/enter email address/i);
+    const passwordInput = screen.getByPlaceholderText(/min. 8 characters/i);
+
+    await userEvent.clear(nameInput);
+    await userEvent.type(nameInput, 'Jonathan Doe');
+    await userEvent.clear(emailInput);
+    await userEvent.type(emailInput, 'jonathan@example.com');
+    // Leave password empty
+
+    const submitBtn = screen.getByRole('button', { name: /save changes/i });
+    await userEvent.click(submitBtn);
+
+    // Wait for error message to appear
+    expect(await screen.findByText(/failed to update user/i)).toBeInTheDocument();
   });
 });

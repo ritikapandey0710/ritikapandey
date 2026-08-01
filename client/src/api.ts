@@ -101,11 +101,28 @@ export async function fetchUsers() {
 }
 
 // User management functions
+// User management functions
 export async function createUser(userData: { name: string; email: string; password: string }) {
   const response = await api.post('/users', userData, {
     headers: {
       "Content-Type": "application/json",
     },
   });
+  return response.data;
+}
+
+// Update user
+export async function updateUser(id: string, userData: { name?: string; email?: string; password?: string }) {
+  const response = await api.patch(`/users/${id}`, userData, {
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+  return response.data;
+}
+
+// Delete user (optional)
+export async function deleteUser(id: string) {
+  const response = await api.delete(`/users/${id}`);
   return response.data;
 }
