@@ -5,10 +5,21 @@ import { asyncHandler } from "../../utils/asyncHandler";
 import { auth } from "../../auth";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
+import { Role } from "../../types/role";
 
-const handleZodError = (result: z.SafeParseReturnType<any, any>) => ({
-  error: result.error?.errors[0]?.message ?? "Invalid input",
-});
+const handleZodError = (result: z.SafeParseReturnType<any, any>) => {
+  if (!result.success && result.error) {
+    // Get the first error message if available
+    const firstError = result.error.errors[0];
+    if (firstError && typeof firstError.message === 'string') {
+      return { error: firstError.message };
+    }
+    // Fallback if we can't get a specific message
+    return { error: "Invalid input" };
+  }
+  // This shouldn't happen with safeParse, but just in case
+  return { error: "Invalid input" };
+};
 
 const router = Router();
 
@@ -22,7 +33,7 @@ const updateUserSchema = z.object({
   name: z.string().trim().min(3, "Name must be at least 3 characters").optional(),
   email: z.string().email("Invalid email address").optional(),
   password: z.union([z.string().min(8, "Password must be at least 8 characters"), z.literal("")]).optional(),
-  role: z.enum(["ADMIN", "AGENT"]).optional(),
+  role: z.enum([Role.ADMIN, Role.AGENT]).optional(),
 });
 
 /**

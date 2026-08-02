@@ -34,6 +34,7 @@ router.get(
   authenticate,
   asyncHandler(async (_req, res) => {
     const users = await prisma.user.findMany({
+      where: { deletedAt: null },
       select: {
         id: true,
         name: true,
@@ -146,7 +147,7 @@ router.patch(
 
 /**
  * DELETE /api/users/:id
- * Delete a user (admin only)
+ * Soft delete a user (admin only). Cannot delete oneself.
  */
 router.delete(
   "/:id",
@@ -154,17 +155,29 @@ router.delete(
   asyncHandler(async (req, res) => {
     const { id } = req.params;
 
-    const existing = await prisma.user.findUnique({ where: { id } });
-    if (!existing) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    // Prevent admin from deleting themselves
+    // Prevent self-deletion
     if ((req as any).user?.id === id) {
       return res.status(400).json({ error: "Cannot delete your own account" });
     }
 
-    await prisma.user.delete({ where: { id } });
+    // Ensure user exists and is not already deleted
+    const existing = await prisma.user.findUnique({
+      where: { id },
+      select: { id: true, deletedAt: true },
+    });
+    if (!existing) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    if (existing.deletedAt !== null) {
+      return res.status(400).json({ error: "User already deleted" });
+    }
+
+    // Perform soft delete
+    await prisma.user.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+
     res.status(200).json({ message: "User deleted successfully" });
   })
 );

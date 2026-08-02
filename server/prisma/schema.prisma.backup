@@ -20,12 +20,6 @@ enum TicketStatus {
   CLOSED
 }
 
-enum TicketCategory {
-  GENERAL_QUESTION
-  TECHNICAL_QUESTION
-  REFUND_REQUEST
-}
-
 model User {
   id            String   @id @default(uuid())
   name          String
@@ -95,7 +89,7 @@ model Ticket {
   body        String?
   bodyHtml    String?
   status      TicketStatus @default(OPEN)
-  category    TicketCategory?
+  category    String?
   senderName  String
   senderEmail String
   assignedTo  String?
