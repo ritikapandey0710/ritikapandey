@@ -29,6 +29,10 @@ This document provides context and guidelines for working on the AI‑powered ti
   - **Features**: Email/password login, session management, protected routes
   - **Configuration**: Environment variables for AUTH_SECRET and BETTER_AUTH_URL
 - **Data Validation**: Zod for runtime validation of API requests and form inputs
+- **Validation Utilities**: Shared validation functions in `src/utils/validation.ts` for consistent error handling:
+  - `handleZodError`: Formats Zod validation errors into consistent error objects
+  - `validateRequiredFields`: Validates that required fields are present in objects
+  - `validateEnumValue`: Validates that a value is one of the allowed enum values
 - **Client-side Form Handling**: React Hook Form with Zod resolver for form state, validation, and submission in user creation feature
 - **Error Handling**: Async handler wrapper for route handlers (provides Express 5-like automatic error handling for async routes)
 - **AI/LLM**: OpenAI GPT‑4‑turbo (or open‑source LLM) via LangChain/LlamaIndex

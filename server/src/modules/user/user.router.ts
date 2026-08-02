@@ -6,20 +6,7 @@ import { auth } from "../../auth";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { Role } from "../../types/role";
-
-const handleZodError = (result: z.SafeParseReturnType<any, any>) => {
-  if (!result.success && result.error) {
-    // Get the first error message if available
-    const firstError = result.error.errors[0];
-    if (firstError && typeof firstError.message === 'string') {
-      return { error: firstError.message };
-    }
-    // Fallback if we can't get a specific message
-    return { error: "Invalid input" };
-  }
-  // This shouldn't happen with safeParse, but just in case
-  return { error: "Invalid input" };
-};
+import { handleZodError } from "../../utils/validation";
 
 const router = Router();
 
