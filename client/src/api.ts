@@ -35,19 +35,19 @@ export async function fetchTickets(params?: {
 }
 
 export async function createTicket(ticketData: {
-  title: string;
-  description?: string;
+  subject: string;
+  body?: string;
   status?: string;
-  priority?: string;
-  assigneeId?: string;
+  category?: string;
+  senderName: string;
+  senderEmail: string;
+  assignedTo?: string;
 }) {
   const url = `/tickets`;
 
   try {
     const response = await api.post(url, ticketData, {
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
     });
     return response.data;
   } catch (error: any) {

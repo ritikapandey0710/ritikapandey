@@ -74,6 +74,12 @@ The project has the **Context7** MCP server configured, allowing you to query th
 
 The tool will return the most recent, verified documentation excerpt, ensuring you always have up‑to‑date guidance.
 
+### Testing Philosophy
+
+**Prefer component tests over e2e tests.** The default choice for any new test should be a component test using Vitest and React Testing Library. E2e tests with Playwright should only be written when the scenario genuinely requires a real browser, real network, and multiple integrated services (e.g. a full sign-up → action → assertion flow that cannot be meaningfully replicated by mocking).
+
+Ask before writing an e2e test: *can this be covered by rendering the component with mocked API/auth?* If yes, write a component test instead.
+
 ### Writing E2E Tests with e2e-test-writer
 
 For writing end-to-end tests with Playwright, refer to the `e2e-test-writer` file in the project root. This file contains guidelines and instructions for creating effective E2E tests for the ticket management system.
@@ -158,6 +164,31 @@ Available roles:
 - `UserRole.AGENT` - Support agent with limited permissions
 
 This approach provides compile-time safety and prevents runtime errors from typos in role strings.
+
+### Ticket Enums
+
+Ticket-related enums (`TicketStatus`, `TicketCategory`) are declared as **TypeScript enums** in `client/src/types/ticket.ts`. A companion array is exported alongside each enum for iteration (e.g. in `<select>` options).
+
+```typescript
+// ✅ Correct — enum + iterable array
+export enum TicketStatus {
+  OPEN = 'OPEN',
+  IN_PROGRESS = 'IN_PROGRESS',
+  RESOLVED = 'RESOLVED',
+  CLOSED = 'CLOSED',
+}
+export const TICKET_STATUSES: TicketStatus[] = [TicketStatus.OPEN, TicketStatus.IN_PROGRESS, TicketStatus.RESOLVED, TicketStatus.CLOSED];
+
+// ❌ Wrong — do not use union types or const objects
+export type TicketStatus = 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED';
+export const TicketStatus = { OPEN: 'OPEN', ... } as const;
+```
+
+When adding a new ticket-related enum, follow the same pattern:
+1. Declare the enum in `client/src/types/ticket.ts`.
+2. Export a `TICKET_<NAME>S` array of that enum for iteration.
+3. Use `z.union([z.literal(...), ...])` in Zod schemas — not `z.nativeEnum()`.
+4. Type lookup maps (e.g. `STATUS_LABELS`) as `Record<TicketStatus, ...>` so TypeScript enforces exhaustiveness.
 
 ### Contributing
 - Follow the existing code style (ESLint + Prettier).

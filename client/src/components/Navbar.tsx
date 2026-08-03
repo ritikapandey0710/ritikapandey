@@ -37,6 +37,12 @@ export default function Navbar() {
               >
                 Dashboard
               </Link>
+              <Link
+                to="/tickets"
+                className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition font-medium"
+              >
+                Tickets
+              </Link>
               {user.role === UserRole.ADMIN && (
                 <Link
                   to="/user"

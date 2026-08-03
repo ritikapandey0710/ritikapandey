@@ -2,6 +2,7 @@ import { authClient } from "./lib/auth-client";
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import HomePage from './pages/HomePage';
+import TicketsPage from './pages/TicketsPage';
 import UserPage from './pages/UserPage';
 import LoginPage from './pages/LoginPage';
 import type { AuthUser } from './types/user';
@@ -57,6 +58,7 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<LoginPage />} />
       <Route path="/" element={<PrivateRoute><HomePage /></PrivateRoute>} />
+      <Route path="/tickets" element={<PrivateRoute><TicketsPage /></PrivateRoute>} />
       <Route path="/user" element={<AdminRoute><UserPage /></AdminRoute>} />
       <Route path="*" element={<Navigate to={session ? "/" : "/login"} replace />} />
     </Routes>
