@@ -8,7 +8,35 @@ import ticketRouter from "./ticket.router";
 import userRouter from "./modules/user/user.router";
 import { EmailService } from "./services/email.service";
 
+// Log auth object for debugging
 console.log("Auth object keys:", Object.keys(auth));
+console.log("Auth has routes?", !!auth.routes);
+if (auth.routes) {
+  console.log("Auth routes keys:", Object.keys(auth.routes));
+}
+console.log("Auth handler type:", typeof auth.handler);
+console.log("Auth api type:", typeof auth.api);
+// Log the whole auth object to see if there's an express handler
+console.log("Auth express?", !!auth.express);
+if (auth.express) {
+  console.log("Auth express type:", typeof auth.express);
+}
+
+// Check for middleware
+console.log("Auth middleware exists?", !!auth.middleware);
+if (auth.middleware) {
+  console.log("Auth middleware type:", typeof auth.middleware);
+}
+// Check for toNodeHandler
+if (typeof auth.toNodeHandler === 'function') {
+  console.log("auth.toNodeHandler is a function");
+} else {
+  console.log("auth.toNodeHandler is NOT a function");
+}
+// Log basePath if available
+if (auth.options && auth.options.basePath) {
+  console.log("Auth basePath:", auth.options.basePath);
+}
 
 const requiredEnvVars = ["DATABASE_URL", "AUTH_SECRET"];
 for (const varName of requiredEnvVars) {
@@ -51,11 +79,17 @@ app.use((req, _res, next) => {
 // Body parser MUST come BEFORE auth routes for JSON bodies to be parsed
 app.use(express.json());
 
-// Auth routes must come after body parser
+// Proper better-auth integration - mount at /api/auth as indicated by auth.basePath
+console.log(`Mounting auth middleware at ${auth.options?.basePath || '/api/auth'}`);
 app.use("/api/auth", toNodeHandler(auth));
 
 app.get("/", (_req: Request, res: Response) => {
   res.json({ message: "Help Desk API" });
+});
+
+// Test route to see if server is responding
+app.get("/test", (_req: Request, res: Response) => {
+  res.json({ message: "Test endpoint working" });
 });
 
 // Authentication middleware for ticket routes
@@ -130,7 +164,7 @@ const startEmailService = async () => {
       emailOptions.smtp = {
         host: process.env.EMAIL_SMTP_HOST!,
         port: parseInt(process.env.EMAIL_SMTP_PORT || '587', 10),
-        secure: process.env.EMAIL_SMTP_TLS?.toLowerCase() === 'true' ? true : false, // 465 for SSL, 587 for TLS
+        secure: process.env.EMAIL_SMTP_TLS?.toLowerCase() === 'true' ? true : false,
         user: process.env.EMAIL_SMTP_USER!,
         pass: process.env.EMAIL_SMTP_PASS!,
       };

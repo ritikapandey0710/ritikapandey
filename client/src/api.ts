@@ -12,16 +12,22 @@ const api = axios.create({
   withCredentials: true, // Important for sending cookies with the request
 });
 
-export async function fetchTickets(params?: {
+export interface TicketFetchParams {
   search?: string;
   status?: string;
   priority?: string;
-}) {
+  sortBy?: string; // e.g., 'createdAt', 'subject'
+  sortOrder?: 'asc' | 'desc';
+}
+
+export async function fetchTickets(params?: TicketFetchParams) {
   const queryParams = new URLSearchParams();
 
   if (params?.search) queryParams.append("search", params.search);
   if (params?.status) queryParams.append("status", params.status);
   if (params?.priority) queryParams.append("priority", params.priority);
+  if (params?.sortBy) queryParams.append("sortBy", params.sortBy);
+  if (params?.sortOrder) queryParams.append("sortOrder", params.sortOrder);
 
   const url = `/tickets${queryParams.toString() ? `?${queryParams}` : ""}`;
 
@@ -60,7 +66,6 @@ export async function updateTicket(id: string, ticketData: Partial<{
   title: string;
   description?: string;
   status?: string;
-  priority?: string;
   assigneeId?: string;
 }>) {
   const url = `/tickets/${id}`;
@@ -100,7 +105,6 @@ export async function fetchUsers() {
   return response.data;
 }
 
-// User management functions
 // User management functions
 export async function createUser(userData: { name: string; email: string; password: string }) {
   const response = await api.post('/users', userData, {

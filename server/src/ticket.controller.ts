@@ -1,8 +1,8 @@
 import { prisma } from "./prisma";
-import { TicketCategory } from "./generated/prisma/enums";
 
 export async function getTickets(req: any, res: any) {
-  const { search, status } = req.query;
+  const { search, status, sortBy, sortOrder } = req.query;
+  console.log(`getTickets: sortBy=${sortBy}, sortOrder=${sortOrder}`); // Debug log
   const where: any = {};
 
   const validStatuses = ["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"];
@@ -21,9 +21,20 @@ export async function getTickets(req: any, res: any) {
   }
   if (status && validStatuses.includes(status as string)) where.status = status;
 
+  // Validate and apply sorting
+  const allowedSortFields = ['id', 'subject', 'status', 'category', 'senderName', 'assignedTo', 'createdAt', 'updatedAt'];
+  let orderBy: any = { createdAt: "desc" }; // default sort
+
+  if (sortBy && typeof sortBy === 'string' && allowedSortFields.includes(sortBy)) {
+    const order = (sortOrder && typeof sortOrder === 'string' && (sortOrder.toLowerCase() === 'asc' || sortOrder.toLowerCase() === 'desc'))
+      ? sortOrder.toLowerCase()
+      : 'desc';
+    orderBy = { [sortBy]: order };
+  }
+
   const tickets = await prisma.ticket.findMany({
     where,
-    orderBy: { createdAt: "desc" },
+    orderBy,
   });
 
   res.json(tickets);
@@ -52,25 +63,13 @@ export async function createTicket(req: any, res: any) {
   const validStatuses = ["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"];
   if (status && !validStatuses.includes(status)) return res.status(400).json({ error: "Invalid status value" });
 
-  // Validate category if provided
-  if (category !== undefined && category !== null) {
-    const validCategories = [
-      TicketCategory.GENERAL_QUESTION,
-      TicketCategory.TECHNICAL_QUESTION,
-      TicketCategory.REFUND_REQUEST
-    ];
-    if (!Object.values(TicketCategory).includes(category)) {
-      return res.status(400).json({ error: "Invalid category value" });
-    }
-  }
-
   const ticket = await prisma.ticket.create({
     data: {
       subject,
       body: body || null,
       bodyHtml: bodyHtml || null,
       status: status || "OPEN",
-      category: category || null, // Optional, can be null
+      category: category || null, // Optional, no default value
       senderName,
       senderEmail,
       assignedTo: assignedTo || null, // Optional
@@ -99,20 +98,7 @@ export async function updateTicket(req: any, res: any) {
     if (!validStatuses.includes(status)) return res.status(400).json({ error: "Invalid status value" });
     data.status = status;
   }
-  if (category !== undefined) {
-    // Validate category if provided
-    if (category !== null) {
-      const validCategories = [
-        TicketCategory.GENERAL_QUESTION,
-        TicketCategory.TECHNICAL_QUESTION,
-        TicketCategory.REFUND_REQUEST
-      ];
-      if (!Object.values(TicketCategory).includes(category)) {
-        return res.status(400).json({ error: "Invalid category value" });
-      }
-    }
-    data.category = category;
-  }
+  if (category !== undefined) data.category = category;
   if (senderName !== undefined) data.senderName = senderName;
   if (senderEmail !== undefined) data.senderEmail = senderEmail;
   if (assignedTo !== undefined) data.assignedTo = assignedTo;
