@@ -8,35 +8,7 @@ import ticketRouter from "./ticket.router";
 import userRouter from "./modules/user/user.router";
 import { EmailService } from "./services/email.service";
 
-// Log auth object for debugging
-console.log("Auth object keys:", Object.keys(auth));
-console.log("Auth has routes?", !!auth.routes);
-if (auth.routes) {
-  console.log("Auth routes keys:", Object.keys(auth.routes));
-}
-console.log("Auth handler type:", typeof auth.handler);
-console.log("Auth api type:", typeof auth.api);
-// Log the whole auth object to see if there's an express handler
-console.log("Auth express?", !!auth.express);
-if (auth.express) {
-  console.log("Auth express type:", typeof auth.express);
-}
-
-// Check for middleware
-console.log("Auth middleware exists?", !!auth.middleware);
-if (auth.middleware) {
-  console.log("Auth middleware type:", typeof auth.middleware);
-}
-// Check for toNodeHandler
-if (typeof auth.toNodeHandler === 'function') {
-  console.log("auth.toNodeHandler is a function");
-} else {
-  console.log("auth.toNodeHandler is NOT a function");
-}
-// Log basePath if available
-if (auth.options && auth.options.basePath) {
-  console.log("Auth basePath:", auth.options.basePath);
-}
+console.log("Server starting..."); // Debug line
 
 const requiredEnvVars = ["DATABASE_URL", "AUTH_SECRET"];
 for (const varName of requiredEnvVars) {
@@ -88,7 +60,7 @@ app.get("/", (_req: Request, res: Response) => {
 });
 
 // Test route to see if server is responding
-app.get("/test", (_req: Request, res: Response) => {
+app.get("/api/test", (_req: Request, res: Response) => {
   res.json({ message: "Test endpoint working" });
 });
 

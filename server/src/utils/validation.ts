@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 /**
  * Utility functions for validation and error handling
  */
@@ -7,15 +9,30 @@
  * @param result - The result from z.schema.safeParse()
  * @returns Object with error message or null if validation passed
  */
-export const handleZodError = <T>(result: z.SafeParseReturnType<T, any>) => {
-  if (!result.success && result.error) {
-    // Get the first error message if available
-    const firstError = result.error.errors[0];
-    if (firstError && typeof firstError.message === 'string') {
-      return { error: firstError.message };
+export const handleZodError = <T>(result: z.ZodSafeParseResult<T>) => {
+  if (!result.success) {
+    // Try to get error message from Zod error
+    let errorMessage = "Invalid input";
+    
+    if (result.error) {
+      // Try to get the first error message
+      if (result.error.issues && Array.isArray(result.error.issues) && result.error.issues.length > 0) {
+        const firstIssue = result.error.issues[0];
+        if (firstIssue && typeof firstIssue.message === 'string') {
+          errorMessage = firstIssue.message;
+        }
+      }
+      // Fallback to toString() if available
+      else if (typeof result.error.toString === 'function') {
+        errorMessage = result.error.toString();
+      }
+      // Last resort
+      else if (result.error.message) {
+        errorMessage = String(result.error.message);
+      }
     }
-    // Fallback if we can't get a specific message
-    return { error: "Invalid input" };
+    
+    return { error: errorMessage };
   }
   // Validation passed
   return null;

@@ -14,3 +14,28 @@ export enum TicketCategory {
 }
 
 export const TICKET_CATEGORIES: TicketCategory[] = [TicketCategory.GENERAL_QUESTION, TicketCategory.TECHNICAL_QUESTION, TicketCategory.REFUND_REQUEST];
+
+export const TICKET_PRIORITIES: TicketPriority[] = [TicketPriority.LOW, TicketPriority.MEDIUM, TicketPriority.HIGH, TicketPriority.URGENT];
+
+export enum TicketPriority {
+  LOW = 'LOW',
+  MEDIUM = 'MEDIUM',
+  HIGH = 'HIGH',
+  URGENT = 'URGENT',
+}
+
+export interface Ticket {
+  id: string;
+  ticketNumber?: number;
+  title: string;
+  description: string | null;
+  senderName: string;
+  senderEmail: string;
+  status: TicketStatus;
+  priority: TicketPriority;
+  category: TicketCategory | null;
+  assigneeId: string | null;
+  reporterId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}

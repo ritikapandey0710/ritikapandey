@@ -1,6 +1,5 @@
 import { simpleParser } from 'mailparser';
-import IMAP = require('imap-simple');
-import { Box } from 'imap';
+import IMAP, { Box } from 'imap-simple';
 import { prisma } from '../prisma';
 import nodemailer from 'nodemailer';
 
@@ -99,7 +98,7 @@ export class EmailService {
     const parsed = await simpleParser(rawEmail);
 
     return {
-      from: parsed.from ? [parsed.from] : [],
+      from: parsed.from || [],
       subject: parsed.subject || '(No Subject)',
       text: parsed.text || '',
       html: parsed.html,
@@ -179,12 +178,10 @@ export class EmailService {
         description,
         status: 'OPEN',
         priority,
-        senderName,
-        senderEmail,
         reporterId: userId,
       },
       include: {
-        user_Ticket_reporterIdTouser: { select: { id: true, name: true, email: true } },
+        reporter: { select: { id: true, name: true, email: true } },
       },
     });
 

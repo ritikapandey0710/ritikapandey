@@ -42,3 +42,9 @@ export const auth = betterAuth({
     max: 100,
   },
 });
+
+console.log("Auth object keys:", Object.keys(auth));
+console.log("Auth has routes?", !!auth.routes);
+if (auth.routes) {
+  console.log("Auth routes keys:", Object.keys(auth.routes));
+}

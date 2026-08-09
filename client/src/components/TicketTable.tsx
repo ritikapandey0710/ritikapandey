@@ -41,7 +41,7 @@ export const TicketTable = ({ tickets }: TicketTableProps) => {
         {tickets.map((ticket) => (
           <tr key={ticket.id} className="hover:bg-slate-50/60 transition">
             <td className="px-6 py-4 text-sm font-medium text-slate-900">{ticket.id}</td>
-            <td className="px-6 py-4 text-sm text-slate-600 line-clamp-1 max-w-48">{ticket.subject}</td>
+            <td className="px-6 py-4 text-sm text-slate-600 line-clamp-1 max-w-48">{ticket.title}</td>
             <td className="px-6 py-4">
               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
                 ticket.status === 'OPEN'

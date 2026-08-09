@@ -1,11 +1,13 @@
 import { prisma } from "./prisma";
 
 export async function getTickets(req: any, res: any) {
-  const { search, status, sortBy, sortOrder } = req.query;
-  console.log(`getTickets: sortBy=${sortBy}, sortOrder=${sortOrder}`); // Debug log
-  const where: any = {};
+  const { search, status, category, senderName, assigneeId, priority, sortBy, sortOrder } = req.query;
+  console.log(`getTickets: search=${search}, status=${status}, category=${category}, senderName=${senderName}, assigneeId=${assigneeId}, priority=${priority}, sortBy=${sortBy}, sortOrder=${sortOrder}`); // Debug log
+  const whereConditions: any[] = [];
 
   const validStatuses = ["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"];
+  const validCategories = ["GENERAL_QUESTION", "TECHNICAL_QUESTION", "REFUND_REQUEST"];
+  const validPriorities = ["LOW", "MEDIUM", "HIGH", "URGENT"];
 
   // For now, we'll show all tickets since we don't have user relationships in the Ticket model
   // In a real app, you might want to filter by user ownership or implement a different auth system
@@ -13,16 +15,35 @@ export async function getTickets(req: any, res: any) {
   if (search && typeof search === "string") {
     const searchFilter = {
       OR: [
-        { subject: { contains: search, mode: "insensitive" } },
-        { body: { contains: search, mode: "insensitive" } },
+        { title: { contains: search, mode: "insensitive" } },
+        { description: { contains: search, mode: "insensitive" } },
       ],
     };
-    where.AND = where.AND ? [...where.AND, searchFilter] : [searchFilter];
+    whereConditions.push(searchFilter);
   }
-  if (status && validStatuses.includes(status as string)) where.status = status;
+  if (status && typeof status === 'string' && validStatuses.includes(status)) {
+    whereConditions.push({ status });
+  }
+  if (category && typeof category === 'string' && validCategories.includes(category)) {
+    whereConditions.push({ category });
+  }
+  if (priority && typeof priority === 'string' && validPriorities.includes(priority)) {
+    whereConditions.push({ priority });
+  }
+  if (senderName && typeof senderName === 'string') {
+    whereConditions.push({ senderName: { contains: senderName, mode: "insensitive" } });
+  }
+  if (assigneeId && typeof assigneeId === 'string') {
+    whereConditions.push({ assigneeId: { contains: assigneeId, mode: "insensitive" } });
+  }
+
+  // Build the WHERE clause - if we have multiple conditions, use AND; if one, use it directly; if none, use empty object
+  const where: any = whereConditions.length > 0
+    ? (whereConditions.length === 1 ? whereConditions[0] : { AND: whereConditions })
+    : {};
 
   // Validate and apply sorting
-  const allowedSortFields = ['id', 'subject', 'status', 'category', 'senderName', 'assignedTo', 'createdAt', 'updatedAt'];
+  const allowedSortFields = ['id', 'title', 'status', 'category', 'senderName', 'assigneeId', 'priority', 'createdAt', 'updatedAt'];
   let orderBy: any = { createdAt: "desc" }; // default sort
 
   if (sortBy && typeof sortBy === 'string' && allowedSortFields.includes(sortBy)) {
@@ -42,7 +63,7 @@ export async function getTickets(req: any, res: any) {
 
 export async function getTicketById(req: any, res: any) {
   const ticket = await prisma.ticket.findUnique({
-    where: { id: Number(req.params.id) },
+    where: { id: req.params.id },
   });
 
   if (!ticket) return res.status(404).json({ error: "Ticket not found" });
@@ -54,57 +75,71 @@ export async function getTicketById(req: any, res: any) {
 }
 
 export async function createTicket(req: any, res: any) {
-  const { subject, body, bodyHtml, status, category, senderName, senderEmail, assignedTo } = req.body;
+  const { title, description, status, priority, category, senderName, senderEmail, assigneeId } = req.body;
 
-  if (!subject) return res.status(400).json({ error: "Subject is required" });
+  if (!title) return res.status(400).json({ error: "Title is required" });
   if (!senderName) return res.status(400).json({ error: "Sender name is required" });
   if (!senderEmail) return res.status(400).json({ error: "Sender email is required" });
 
   const validStatuses = ["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"];
   if (status && !validStatuses.includes(status)) return res.status(400).json({ error: "Invalid status value" });
 
+  const validPriorities = ["LOW", "MEDIUM", "HIGH", "URGENT"];
+  if (priority && !validPriorities.includes(priority)) return res.status(400).json({ error: "Invalid priority value" });
+
+  const validCategories = ["GENERAL_QUESTION", "TECHNICAL_QUESTION", "REFUND_REQUEST"];
+  if (category && !validCategories.includes(category)) return res.status(400).json({ error: "Invalid category value" });
+
+  // Get the current user from the request (set by auth middleware)
+  const userId = (req as any).user?.id;
+
   const ticket = await prisma.ticket.create({
     data: {
-      subject,
-      body: body || null,
-      bodyHtml: bodyHtml || null,
+      title,
+      description: description || null,
       status: status || "OPEN",
+      priority: priority || "MEDIUM",
       category: category || null, // Optional, no default value
       senderName,
       senderEmail,
-      assignedTo: assignedTo || null, // Optional
+      assigneeId: assigneeId || null, // Optional
+      reporterId: userId || null, // Set to current user if available
     },
   });
 
-  res.status(201).json(ticket);
+  res.json(ticket);
 }
 
 export async function updateTicket(req: any, res: any) {
   const { id } = req.params;
-  const { subject, body, bodyHtml, status, category, senderName, senderEmail, assignedTo } = req.body;
+  const { title, description, status, priority, category, senderName, senderEmail, assigneeId } = req.body;
 
-  const existing = await prisma.ticket.findUnique({ where: { id: Number(id) } });
+  const existing = await prisma.ticket.findUnique({ where: { id } });
   if (!existing) return res.status(404).json({ error: "Ticket not found" });
 
   // For now, we'll allow updates to any ticket since we don't have ownership tracking
   // In a real app, you would check if the user owns this ticket or has permission
 
   const data: any = {};
-  if (subject !== undefined) data.subject = subject;
-  if (body !== undefined) data.body = body;
-  if (bodyHtml !== undefined) data.bodyHtml = bodyHtml;
-  const validStatuses = ["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"];
+  if (title !== undefined) data.title = title;
+  if (description !== undefined) data.description = description;
   if (status !== undefined) {
+    const validStatuses = ["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"];
     if (!validStatuses.includes(status)) return res.status(400).json({ error: "Invalid status value" });
     data.status = status;
+  }
+  if (priority !== undefined) {
+    const validPriorities = ["LOW", "MEDIUM", "HIGH", "URGENT"];
+    if (!validPriorities.includes(priority)) return res.status(400).json({ error: "Invalid priority value" });
+    data.priority = priority;
   }
   if (category !== undefined) data.category = category;
   if (senderName !== undefined) data.senderName = senderName;
   if (senderEmail !== undefined) data.senderEmail = senderEmail;
-  if (assignedTo !== undefined) data.assignedTo = assignedTo;
+  if (assigneeId !== undefined) data.assigneeId = assigneeId;
 
   const ticket = await prisma.ticket.update({
-    where: { id: Number(id) },
+    where: { id },
     data,
   });
 
@@ -114,12 +149,13 @@ export async function updateTicket(req: any, res: any) {
 export async function deleteTicket(req: any, res: any) {
   const { id } = req.params;
 
-  const existing = await prisma.ticket.findUnique({ where: { id: Number(id) } });
+  const existing = await prisma.ticket.findUnique({ where: { id } });
   if (!existing) return res.status(404).json({ error: "Ticket not found" });
 
   // For now, we'll allow deletion of any ticket since we don't have ownership tracking
   // In a real app, you would check if the user owns this ticket or has permission
 
-  await prisma.ticket.delete({ where: { id: Number(id) } });
+  await prisma.ticket.delete({ where: { id } });
+
   res.json({ message: "Ticket deleted successfully" });
 }

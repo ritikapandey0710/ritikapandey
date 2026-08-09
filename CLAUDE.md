@@ -8,6 +8,7 @@ This document provides context and guidelines for working on the AI‑powered ti
 - **Goal**: Build a ticket management system that uses AI to automatically classify, respond to, and route support emails.
 - **Key Features**:
   - Receive support emails and create tickets
+  - Manual ticket creation via form for users and agents
   - Auto‑generate human‑friendly responses using a knowledge base
   - Ticket list with filtering and sorting
   - Ticket detail view

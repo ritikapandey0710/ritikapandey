@@ -5,8 +5,9 @@ import { useState, useCallback, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { TicketStatus, TicketCategory, TicketPriority, TICKET_STATUSES, TICKET_CATEGORIES } from '../types/ticket';
-import { useReactTable, getCoreRowModel, getSortedRowModel, type SortingState, type ColumnDef, flexRender } from '@tanstack/react-table';
+import { TicketStatus, TicketCategory, TICKET_STATUSES, TICKET_CATEGORIES } from '../types/ticket';
+import { useReactTable, getCoreRowModel, getSortedRowModel, type SortingState, type ColumnDef } from '@tanstack/react-table';
+import { Link } from 'react-router-dom';
 
 const STATUS_LABELS: Record<TicketStatus, { label: string; color: string }> = {
   [TicketStatus.OPEN]:        { label: 'Open',        color: 'bg-blue-100 text-blue-700' },
@@ -20,14 +21,6 @@ const CATEGORY_LABELS: Record<TicketCategory, string> = {
   [TicketCategory.TECHNICAL_QUESTION]: 'Technical Question',
   [TicketCategory.REFUND_REQUEST]:     'Refund Request',
 };
-
-const PRIORITY_LABELS: Record<TicketPriority, { label: string; color: string }> = {
-  [TicketPriority.LOW]:      { label: 'Low',      color: 'bg-green-100 text-green-700' },
-  [TicketPriority.MEDIUM]:   { label: 'Medium',   color: 'bg-yellow-100 text-yellow-700' },
-  [TicketPriority.HIGH]:     { label: 'High',     color: 'bg-orange-100 text-orange-700' },
-  [TicketPriority.URGENT]:   { label: 'Urgent',   color: 'bg-red-100 text-red-700' },
-};
-
 
 const createTicketSchema = z.object({
   subject:     z.string().trim().min(3, 'Subject must be at least 3 characters'),
@@ -173,54 +166,29 @@ export default function TicketsPage() {
   const handleClose = useCallback(() => setIsModalOpen(false), []);
 
   // Table state for sorting
-  const [sorting, setSorting] = useState<SortingState>([]);
-
-  const handleSortChange = useCallback((columnId: string) => {
-    setSorting((prev) => {
-      const isAlreadySorted = prev.some((s) => s.id === columnId);
-      if (isAlreadySorted) {
-        // Toggle direction
-        return prev.map((s) =>
-          s.id === columnId ? { ...s, desc: !s.desc } : s
-        );
-      } else {
-        // New sort: ascending by default
-        return [{ id: columnId, desc: false }];
-      }
-    });
-  }, []);
+  const [sorting, setSorting] = useState<SortingState>([{ id: 'createdAt', desc: true }]);
 
   // Fetch tickets with sorting parameters
   const { data: tickets, isLoading, isError, error } = useQuery({
     queryKey: ['tickets', sorting],
     queryFn: () => fetchTickets({
-      sortBy: sorting.length > 0 ? sorting[0].id : undefined,
-      sortOrder: sorting.length > 0 ? (sorting[0].desc ? 'desc' : 'asc') : undefined,
+      sortBy: sorting[0]?.id,
+      sortOrder: sorting[0]?.desc ? 'desc' : 'asc',
     }),
     enabled,
   });
 
-
   // Table columns configuration
   const columns = useMemo<ColumnDef<any>[]>(() => [
     {
-      accessorKey: 'ticketNumber',
-      header: 'Ticket #',
+      accessorKey: 'id',
+      header: 'ID',
       enableSorting: true,
-      cell: ({ getValue, row }) => {
-        const ticketNumber = getValue() as number | null | undefined;
-        if (ticketNumber !== null && ticketNumber !== undefined) {
-          return <div className="text-xs text-slate-400 font-mono">TKT-{String(ticketNumber).padStart(5, '0')}</div>;
-        }
-        // Fallback to UUID id if ticketNumber is not available (e.g., before migration)
-        const id = row.original.id as string;
-        return <div className="text-xs text-slate-400 font-mono">TKT-{id.substring(0, 8).toUpperCase()}</div>;
-      }
+      cell: ({ getValue }) => <div className="text-xs text-slate-400 font-mono">{'#' + String(getValue())}</div>,
     },
     {
-      accessorKey: 'title',
+      accessorKey: 'subject',
       header: 'Subject',
-      enableSorting: true,
       cell: ({ getValue }) => (
         <div className="text-sm text-slate-600 line-clamp-1 max-w-48">
           {getValue() as string}
@@ -230,7 +198,6 @@ export default function TicketsPage() {
     {
       accessorKey: 'senderName',
       header: 'Sender',
-      enableSorting: true,
       cell: ({ getValue }) => {
         const val = getValue() as string;
         return (
@@ -246,7 +213,6 @@ export default function TicketsPage() {
     {
       accessorKey: 'status',
       header: 'Status',
-      enableSorting: true,
       cell: ({ getValue }) => {
         const status = getValue() as TicketStatus;
         const labelInfo = STATUS_LABELS[status] || { label: status, color: 'bg-slate-100 text-slate-600' };
@@ -260,7 +226,6 @@ export default function TicketsPage() {
     {
       accessorKey: 'category',
       header: 'Category',
-      enableSorting: true,
       cell: ({ getValue }) => {
         const category = getValue() as TicketCategory | null;
         if (!category) return <span className="text-xs text-slate-500 italic">—</span>;
@@ -277,23 +242,8 @@ export default function TicketsPage() {
       },
     },
     {
-      accessorKey: 'priority',
-      header: 'Priority',
-      enableSorting: true,
-      cell: ({ getValue }) => {
-        const priority = getValue() as TicketPriority;
-        const labelInfo = PRIORITY_LABELS[priority] || { label: priority, color: 'bg-slate-100 text-slate-600' };
-        return (
-          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${labelInfo.color}`}>
-            {labelInfo.label}
-          </span>
-        );
-      },
-    },
-    {
       accessorKey: 'assignedTo',
       header: 'Assigned To',
-      enableSorting: true,
       cell: ({ getValue }) => {
         const assignedTo = getValue() as string | null;
         if (!assignedTo) return <span className="text-xs text-slate-500 italic">—</span>;
@@ -310,7 +260,6 @@ export default function TicketsPage() {
     {
       accessorKey: 'createdAt',
       header: 'Created',
-      enableSorting: true,
       cell: ({ getValue }) => {
         const date = new Date(getValue() as string);
         return (
@@ -322,21 +271,11 @@ export default function TicketsPage() {
     },
     {
       id: 'actions',
-      accessorKey: 'id',
       header: 'Actions',
-      enableSorting: true,
       cell: ({ row }) => (
         <div className="flex items-center gap-2 text-sm font-medium">
           <button
-            onClick={() => {
-              const ticketNumber = (row.original as any).ticketNumber;
-              if (ticketNumber !== null && ticketNumber !== undefined) {
-                alert(`View ticket TKT-${String(ticketNumber).padStart(5, '0')}`);
-              } else {
-                const id = (row.original as any).id as string;
-                alert(`View ticket TKT-${id.substring(0, 8).toUpperCase()}`);
-              }
-            }}
+            onClick={() => alert(`View ticket ${row.original.id}`)}
             className="flex items-center gap-2 text-indigo-600 hover:text-indigo-900 transition"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -358,14 +297,6 @@ export default function TicketsPage() {
     getSortedRowModel: getSortedRowModel(),
     state: { sorting },
     onSortingChange: setSorting,
-    getRowId: (row) => {
-      // Use ticketNumber if available, otherwise fall back to id
-      const ticketNumber = (row.original as any).ticketNumber;
-      if (ticketNumber !== null && ticketNumber !== undefined) {
-        return ticketNumber.toString();
-      }
-      return (row.original as any).id;
-    },
   });
 
   if (isLoading) {
@@ -416,7 +347,7 @@ export default function TicketsPage() {
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mb-3">
                 <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2H5z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
                 </svg>
               </div>
               <p className="text-sm font-medium text-slate-900">No tickets yet</p>
@@ -428,23 +359,25 @@ export default function TicketsPage() {
                 <thead>
                   {table.getHeaderGroups().map(headerGroup => (
                     <tr key={headerGroup.id} className="border-b border-slate-100 bg-slate-50">
-                      {headerGroup.headers.map((header) => (
+                      {headerGroup.headers.map(header => (
                         <th
                           key={header.id}
-                          colSpan={header.colSpan}
-                          onClick={() => handleSortChange(header.column.id)}
-                          className={
-                            'text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide' +
-                            (header.column.getCanSort() ? ' cursor-pointer' : '') +
-                            ' select-none'
-                          }
+                          {...header.column.getHeaderProps()}
+                          className="text-left px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide cursor-pointer select-none"
                         >
-                          {header.isPlaceholder ? null : (
+                          {header.getIsPlaceholder() ? null : (
                             <div className="flex items-center gap-1">
-                              {flexRender(header.column.columnDef.header, header.getContext())}
-                              <span className={`ml-1 text-xs ${header.column.getIsSorted() ? '' : 'opacity-40'}`}>
-                                {header.column.getIsSorted() ? (((header.column.getIsSorted() as unknown) as { desc: boolean }).desc ? '�▼' : '�▲') : '��↕'}
-                              </span>
+                              {/* Render header based on column ID */}
+                              {header.column.id === 'id' ? '#' :
+                               header.column.id === 'subject' ? 'Subject' :
+                               header.column.id === 'senderName' ? 'Sender' :
+                               header.column.id === 'status' ? 'Status' :
+                               header.column.id === 'category' ? 'Category' :
+                               header.column.id === 'assignedTo' ? 'Assigned To' :
+                               header.column.id === 'createdAt' ? 'Created' :
+                               header.column.id === 'actions' ? 'Actions' :
+                               header.column.id}
+                              {header.getIsSorted() === 'asc' ? ' 🔼' : header.getIsSorted() === 'desc' ? ' 🔽' : null}
                             </div>
                           )}
                         </th>
@@ -456,12 +389,14 @@ export default function TicketsPage() {
                   {table.getRowModel().rows.map((row) => (
                     <tr key={row.id} className="hover:bg-slate-50 transition">
                       {row.getVisibleCells().map((cell) => {
+                        const cellProps = cell.getCellProps();
                         return (
                           <td
                             key={cell.id}
+                            {...cellProps}
                             className="px-5 py-4"
                           >
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                            {cell.render('Cell')}
                           </td>
                         );
                       })}

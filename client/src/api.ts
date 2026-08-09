@@ -16,6 +16,9 @@ export interface TicketFetchParams {
   search?: string;
   status?: string;
   priority?: string;
+  category?: string;
+  senderName?: string;
+  assignedTo?: string;
   sortBy?: string; // e.g., 'createdAt', 'subject'
   sortOrder?: 'asc' | 'desc';
 }
@@ -26,6 +29,9 @@ export async function fetchTickets(params?: TicketFetchParams) {
   if (params?.search) queryParams.append("search", params.search);
   if (params?.status) queryParams.append("status", params.status);
   if (params?.priority) queryParams.append("priority", params.priority);
+  if (params?.category) queryParams.append("category", params.category);
+  if (params?.senderName) queryParams.append("senderName", params.senderName);
+  if (params?.assignedTo) queryParams.append("assignedTo", params.assignedTo);
   if (params?.sortBy) queryParams.append("sortBy", params.sortBy);
   if (params?.sortOrder) queryParams.append("sortOrder", params.sortOrder);
 
@@ -105,7 +111,6 @@ export async function fetchUsers() {
   return response.data;
 }
 
-// User management functions
 export async function createUser(userData: { name: string; email: string; password: string }) {
   const response = await api.post('/users', userData, {
     headers: {

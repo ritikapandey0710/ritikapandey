@@ -3,41 +3,24 @@ generator client {
   output   = "../src/generated/prisma"
 }
 
-//  Datasource is defined in .env as per prisma.config.ts
 datasource db {
   provider = "postgresql"
 }
 
-enum Role {
-  ADMIN
-  AGENT
-}
-
-enum TicketStatus {
-  OPEN
-  IN_PROGRESS
-  RESOLVED
-  CLOSED
-}
-
-enum TicketCategory {
-  GENERAL_QUESTION
-  TECHNICAL_QUESTION
-  REFUND_REQUEST
-}
-
 model User {
-  id            String   @id @default(uuid())
-  name          String
-  email         String   @unique
-  emailVerified Boolean  @default(false)
-  image         String?
-  role          Role     @default(AGENT)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  deletedAt     DateTime?
-  sessions      Session[]
-  accounts      Account[]
+  id                             String    @id @default(uuid())
+  name                           String?
+  email                          String    @unique
+  emailVerified                  Boolean   @default(false)
+  image                          String?
+  role                           Role      @default(AGENT)
+  createdAt                      DateTime  @default(now())
+  updatedAt                      DateTime  @updatedAt
+  deletedAt                      DateTime?
+  Ticket_Ticket_assigneeIdTouser Ticket[]  @relation("Ticket_assigneeIdTouser")
+  Ticket_Ticket_reporterIdTouser Ticket[]  @relation("Ticket_reporterIdTouser")
+  accounts                       Account[]
+  sessions                       Session[]
 
   @@map("user")
 }
@@ -62,7 +45,6 @@ model Account {
   accountId             String
   providerId            String
   userId                String
-  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   accessToken           String?
   refreshToken          String?
   idToken               String?
@@ -72,6 +54,7 @@ model Account {
   password              String?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@map("account")
@@ -90,15 +73,50 @@ model Verification {
 }
 
 model Ticket {
-  id          Int       @id @default(autoincrement())
-  subject     String
-  body        String?
-  bodyHtml    String?
-  status      TicketStatus @default(OPEN)
-  category    TicketCategory?
-  senderName  String
-  senderEmail String
-  assignedTo  String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                           String         @id @default(uuid())
+  ticketNumber                 Int            @unique @default(autoincrement())
+  title                        String
+  description                  String?
+  senderName                   String
+  senderEmail                  String
+  status                       TicketStatus   @default(OPEN)
+  priority                     TicketPriority @default(MEDIUM)
+  category                     TicketCategory?
+  assigneeId                   String?
+  reporterId                   String?
+  createdAt                    DateTime       @default(now())
+  updatedAt                    DateTime       @updatedAt
+  user_Ticket_assigneeIdTouser User?          @relation("Ticket_assigneeIdTouser", fields: [assigneeId], references: [id])
+  user_Ticket_reporterIdTouser User?          @relation("Ticket_reporterIdTouser", fields: [reporterId], references: [id])
+
+  @@index([assigneeId])
+  @@index([priority])
+  @@index([reporterId])
+  @@index([status])
+  @@map("Ticket")
+}
+
+enum Role {
+  ADMIN
+  AGENT
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TicketCategory {
+  GENERAL_QUESTION
+  TECHNICAL_QUESTION
+  REFUND_REQUEST
 }

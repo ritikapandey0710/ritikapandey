@@ -1,6 +1,9 @@
 import { auth } from "./src/auth";
 import { prisma } from "./src/prisma";
 
+// Override DATABASE_URL to ensure we're using the correct database
+process.env.DATABASE_URL = "postgresql://postgres:230023107062@localhost:5432/helpdesk?schema=public";
+
 async function main() {
   // Create admin user
   const adminEmail = process.env.ADMIN_EMAIL ?? "admin@example.com";
@@ -32,7 +35,7 @@ async function main() {
   // Update the admin user to be verified and set role to ADMIN
   await prisma.user.update({
     where: { id: adminRes.user.id },
-    data: { 
+    data: {
       emailVerified: true,
       role: "ADMIN"
     },
@@ -70,7 +73,7 @@ async function main() {
   // Update the agent user to be verified and set role to AGENT (default)
   await prisma.user.update({
     where: { id: agentRes.user.id },
-    data: { 
+    data: {
       emailVerified: true,
       role: "AGENT"  // Explicitly set to AGENT (though it's the default)
     },
