@@ -283,7 +283,7 @@ describe('UserPage', () => {
     // Fill in invalid data
     const nameInput = screen.getByPlaceholderText(/enter full name/i);
     const emailInput = screen.getByPlaceholderText(/enter email address/i);
-    const passwordInput = screen.getByPlaceholderText(/min. 8 characters/i);
+    const _passwordInput = screen.getByPlaceholderText(/min. 8 characters/i);
 
     await userEvent.type(nameInput, 'Jo'); // too short
     await userEvent.type(emailInput, 'invalid'); // invalid email
@@ -323,7 +323,7 @@ describe('UserPage', () => {
     // Fill in valid data
     const nameInput = screen.getByPlaceholderText(/enter full name/i);
     const emailInput = screen.getByPlaceholderText(/enter email address/i);
-    const passwordInput = screen.getByPlaceholderText(/min. 8 characters/i);
+    const _passwordInput = screen.getByPlaceholderText(/min. 8 characters/i);
 
     await userEvent.type(nameInput, 'John Doe');
     await userEvent.type(emailInput, 'john@example.com');
@@ -454,7 +454,7 @@ describe('UserPage', () => {
 
     const nameInput = screen.getByPlaceholderText(/enter full name/i);
     const emailInput = screen.getByPlaceholderText(/enter email address/i);
-    const passwordInput = screen.getByPlaceholderText(/min. 8 characters/i);
+    const _passwordInput = screen.getByPlaceholderText(/min. 8 characters/i);
 
     await userEvent.clear(nameInput);
     await userEvent.type(nameInput, 'Jonathan Doe');
@@ -506,7 +506,7 @@ describe('UserPage', () => {
 
     const nameInput = screen.getByPlaceholderText(/enter full name/i);
     const emailInput = screen.getByPlaceholderText(/enter email address/i);
-    const passwordInput = screen.getByPlaceholderText(/min. 8 characters/i);
+    const _passwordInput = screen.getByPlaceholderText(/min. 8 characters/i);
 
     await userEvent.type(nameInput, 'John Doe');
     await userEvent.type(emailInput, 'john@example.com');
@@ -552,7 +552,7 @@ describe('UserPage', () => {
     // Fill in invalid data
     const nameInput = screen.getByPlaceholderText(/enter full name/i);
     const emailInput = screen.getByPlaceholderText(/enter email address/i);
-    const passwordInput = screen.getByPlaceholderText(/min. 8 characters/i);
+    const _passwordInput = screen.getByPlaceholderText(/min. 8 characters/i);
 
     await userEvent.type(nameInput, 'Jo'); // too short
     await userEvent.type(emailInput, 'invalid'); // invalid email
@@ -595,7 +595,7 @@ describe('UserPage', () => {
 
     const nameInput = screen.getByPlaceholderText(/enter full name/i);
     const emailInput = screen.getByPlaceholderText(/enter email address/i);
-    const passwordInput = screen.getByPlaceholderText(/min. 8 characters/i);
+    const _passwordInput = screen.getByPlaceholderText(/min. 8 characters/i);
 
     await userEvent.clear(nameInput);
     await userEvent.type(nameInput, 'Jonathan Doe');

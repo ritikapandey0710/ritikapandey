@@ -7,6 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { TicketStatus, TicketCategory, TicketPriority, TICKET_STATUSES, TICKET_CATEGORIES } from '../types/ticket';
 import { useReactTable, getCoreRowModel, getSortedRowModel, type SortingState, type ColumnDef, flexRender } from '@tanstack/react-table';
+import { ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 
 const STATUS_LABELS: Record<TicketStatus, { label: string; color: string }> = {
   [TicketStatus.OPEN]:        { label: 'Open',        color: 'bg-blue-100 text-blue-700' },
@@ -442,9 +443,13 @@ export default function TicketsPage() {
                           {header.isPlaceholder ? null : (
                             <div className="flex items-center gap-1">
                               {flexRender(header.column.columnDef.header, header.getContext())}
-                              <span className={`ml-1 text-xs ${header.column.getIsSorted() ? '' : 'opacity-40'}`}>
-                                {header.column.getIsSorted() ? (((header.column.getIsSorted() as unknown) as { desc: boolean }).desc ? '�▼' : '�▲') : '��↕'}
-                              </span>
+                              {header.column.getIsSorted() === 'desc' ? (
+                                <ArrowDown className="ml-1 h-4 w-4 text-slate-600" />
+                              ) : header.column.getIsSorted() === 'asc' ? (
+                                <ArrowUp className="ml-1 h-4 w-4 text-slate-600" />
+                              ) : (
+                                <ArrowUpDown className="ml-1 h-4 w-4 text-slate-400" />
+                              )}
                             </div>
                           )}
                         </th>
@@ -455,16 +460,14 @@ export default function TicketsPage() {
                 <tbody className="divide-y divide-slate-100">
                   {table.getRowModel().rows.map((row) => (
                     <tr key={row.id} className="hover:bg-slate-50 transition">
-                      {row.getVisibleCells().map((cell) => {
-                        return (
-                          <td
-                            key={cell.id}
-                            className="px-5 py-4"
-                          >
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                          </td>
-                        );
-                      })}
+                      {row.getVisibleCells().map((cell) => (
+                        <td
+                          key={cell.id}
+                          className="px-5 py-4"
+                        >
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </td>
+                      ))}
                     </tr>
                   ))}
                 </tbody>
@@ -473,12 +476,14 @@ export default function TicketsPage() {
           )}
         </div>
 
-        {/* Create Ticket Modal */}
-        <CreateTicketModal
-          isOpen={isModalOpen}
-          onClose={handleClose}
-          onSuccess={() => queryClient.invalidateQueries({ queryKey: ['tickets'] })}
-        />
+        {isModalOpen && (
+          <CreateTicketModal
+            isOpen={isModalOpen}
+            onClose={handleClose}
+            onSuccess={() => queryClient.invalidateQueries({ queryKey: ['tickets'] })}
+          />
+        )}
+
       </div>
     </div>
   );

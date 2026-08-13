@@ -1,13 +1,13 @@
 import React from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, Title } from "@/components/ui/card";
 import { AlertTriangle } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 
 interface DeleteUserModalProps {
   isOpen: boolean;
   onClose: () => void;
+  userId: string;
   userName: string;
   onConfirm: () => Promise<void>;
   loading: boolean;
@@ -16,10 +16,12 @@ interface DeleteUserModalProps {
 export const DeleteUserModal: React.FC<DeleteUserModalProps> = ({
   isOpen,
   onClose,
+  userId,
   userName,
   onConfirm,
   loading,
 }) => {
+  void userId;
   const { data: session } = authClient.useSession();
   const currentUserId = session?.user?.id;
 
@@ -66,7 +68,6 @@ export const DeleteUserModal: React.FC<DeleteUserModalProps> = ({
             <Button
               variant="destructive"
               onClick={handleConfirm}
-              isLoading={loading}
               size="default"
               disabled={loading || currentUserId === undefined}
             >

@@ -16,6 +16,7 @@
   "devDependencies": {
     "@playwright/test": "^1.62.0",
     "@tanstack/react-table": "^8.21.3",
+    "@types/bcryptjs": "2.4.6",
     "concurrently": "^8.2.2",
     "dotenv": "^17.4.2",
     "playwright": "^1.62.0",

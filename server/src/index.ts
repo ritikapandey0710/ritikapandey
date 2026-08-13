@@ -1,4 +1,5 @@
 import "dotenv/config";
+console.log('DEBUG: index.ts loaded');
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import rateLimit from "express-rate-limit";

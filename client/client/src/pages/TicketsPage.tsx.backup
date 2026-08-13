@@ -9,7 +9,6 @@ import { TicketStatus, TicketCategory, TICKET_STATUSES, TICKET_CATEGORIES } from
 import { useReactTable, getCoreRowModel, getSortedRowModel, type SortingState, type ColumnDef } from '@tanstack/react-table';
 import { Link } from 'react-router-dom';
 
-import { ArrowUp, ArrowDown } from "lucide-react";
 const STATUS_LABELS: Record<TicketStatus, { label: string; color: string }> = {
   [TicketStatus.OPEN]:        { label: 'Open',        color: 'bg-blue-100 text-blue-700' },
   [TicketStatus.IN_PROGRESS]: { label: 'In Progress', color: 'bg-amber-100 text-amber-700' },
@@ -23,12 +22,6 @@ const CATEGORY_LABELS: Record<TicketCategory, string> = {
   [TicketCategory.REFUND_REQUEST]:     'Refund Request',
 };
 
-const PRIORITY_LABELS: Record<TicketPriority, { label: string; color: string }> = {
-  [TicketPriority.LOW]:      { label: 'Low',      color: 'bg-green-100 text-green-700' },
-  [TicketPriority.MEDIUM]:   { label: 'Medium',   color: 'bg-yellow-100 text-yellow-700' },
-  [TicketPriority.HIGH]:     { label: 'High',     color: 'bg-orange-100 text-orange-700' },
-  [TicketPriority.URGENT]:   { label: 'Urgent',   color: 'bg-red-100 text-red-700' },
-};
 const createTicketSchema = z.object({
   subject:     z.string().trim().min(3, 'Subject must be at least 3 characters'),
   body:        z.string().trim().optional(),
@@ -246,19 +239,6 @@ export default function TicketsPage() {
             {label}
           </span>
         );
-    {
-      accessorKey: 'priority',
-      header: 'Priority',
-      cell: ({ getValue }) => {
-        const priority = getValue() as TicketPriority;
-        const labelInfo = PRIORITY_LABELS[priority] || { label: priority, color: 'bg-slate-100 text-slate-600' };
-        return (
-          <span className=`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${labelInfo.color}`>
-            {labelInfo.label}
-          </span>
-        );
-      },
-    },
       },
     },
     {
@@ -397,7 +377,7 @@ export default function TicketsPage() {
                                header.column.id === 'createdAt' ? 'Created' :
                                header.column.id === 'actions' ? 'Actions' :
                                header.column.id}
-                              {header.getIsSorted() === 'asc' ? ( <ArrowUp className="ml-1 h-4 w-4 text-slate-600" /> ) : header.getIsSorted() === 'desc' ? ( <ArrowDown className="ml-1 h-4 w-4 text-slate-600" /> ) : ( <ArrowUpDown className="ml-1 h-4 w-4 text-slate-400" /> )}
+                              {header.getIsSorted() === 'asc' ? ' 🔼' : header.getIsSorted() === 'desc' ? ' 🔽' : null}
                             </div>
                           )}
                         </th>
