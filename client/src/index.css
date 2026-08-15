@@ -78,3 +78,9 @@
     transition: background-color 5000s ease-in-out 0s;
   }
 }
+
+@layer components {
+  .link {
+    @apply hover:underline;
+  }
+}

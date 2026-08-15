@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { TicketStatus, TicketCategory, TicketPriority, TICKET_STATUSES, TICKET_CATEGORIES, TICKET_PRIORITIES } from '../types/ticket';
 import { useReactTable, getCoreRowModel, getSortedRowModel, getFilteredRowModel, getPaginationRowModel, type SortingState, type ColumnDef, type ColumnFiltersState, type FilterFn, type FilterFnOption, type PaginationState, flexRender } from '@tanstack/react-table';
 import { ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 const STATUS_LABELS: Record<TicketStatus, { label: string; color: string }> = {
   [TicketStatus.OPEN]:        { label: 'Open',        color: 'bg-blue-100 text-blue-700' },
@@ -313,11 +314,16 @@ export default function TicketsPage() {
       accessorKey: 'title',
       header: 'Subject',
       enableSorting: true,
-      cell: ({ getValue }) => (
-        <div className="text-sm text-slate-600 line-clamp-1 max-w-48">
-          {getValue() as string}
-        </div>
-      ),
+      cell: ({ getValue, row }) => {
+        const ticketId = (row.original as any).id;
+        return (
+          <Link to={`/tickets/${ticketId}`} className="link">
+            <div className="text-sm text-slate-600 line-clamp-1 max-w-48">
+              {getValue() as string}
+            </div>
+          </Link>
+        );
+      },
     },
     {
       accessorKey: 'senderName',

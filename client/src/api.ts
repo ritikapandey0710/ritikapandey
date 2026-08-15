@@ -101,6 +101,18 @@ export async function deleteTicket(id: string) {
   }
 }
 
+export async function fetchTicketById(id: string) {
+  const url = `/tickets/${id}`;
+
+  try {
+    const response = await api.get(url);
+    return response.data;
+  } catch (error: any) {
+    console.error("Error fetching ticket by id:", error);
+    throw new Error(`Failed to fetch ticket: ${error.response?.status || 'Unknown error'}`);
+  }
+}
+
 // User management functions
 export async function fetchUsers() {
   const response = await api.get('/users', {
