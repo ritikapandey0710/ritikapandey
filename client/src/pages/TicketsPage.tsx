@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { TicketStatus, TicketCategory, TicketPriority, TICKET_STATUSES, TICKET_CATEGORIES, TICKET_PRIORITIES } from '../types/ticket';
-import { useReactTable, getCoreRowModel, getSortedRowModel, getFilteredRowModel, type SortingState, type ColumnDef, type ColumnFiltersState, type FilterFn, type FilterFnOption, flexRender } from '@tanstack/react-table';
+import { useReactTable, getCoreRowModel, getSortedRowModel, getFilteredRowModel, getPaginationRowModel, type SortingState, type ColumnDef, type ColumnFiltersState, type FilterFn, type FilterFnOption, type PaginationState, flexRender } from '@tanstack/react-table';
 import { ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 
 const STATUS_LABELS: Record<TicketStatus, { label: string; color: string }> = {
@@ -275,6 +275,14 @@ export default function TicketsPage() {
 
   const hasAnyFilter = !!(globalFilter || statusFilter || priorityFilter || categoryFilter || assigneeFilter || dateFilter);
 
+  // Pagination state
+  const [paginationState, setPaginationState] = useState({ pageIndex: 0, pageSize: 10 });
+  const setPagination = useCallback((updater) => {
+    setPaginationState((prev) => {
+      return typeof updater === 'function' ? updater(prev) : updater;
+    });
+  }, []);
+
   const clearFilters = useCallback(() => {
     setGlobalFilter('');
     setStatusFilter('');
@@ -282,6 +290,8 @@ export default function TicketsPage() {
     setCategoryFilter('');
     setAssigneeFilter('');
     setDateFilter('');
+    // Reset to first page when clearing filters
+    setPaginationState((prev) => ({ pageIndex: 0, pageSize: prev.pageSize }));
   }, []);
 
   // Table columns configuration
@@ -454,12 +464,14 @@ export default function TicketsPage() {
     columns,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
     filterFns,
     globalFilterFn: 'globalSearch' as any,
-    state: { sorting, columnFilters, globalFilter },
+    state: { sorting, columnFilters, globalFilter, pagination: paginationState },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
+    onPaginationChange: setPagination,
     getRowId: (row) => {
       const ticketNumber = (row as any).ticketNumber;
       if (ticketNumber !== null && ticketNumber !== undefined) {
@@ -470,6 +482,8 @@ export default function TicketsPage() {
   });
 
   const filteredRowCount = table.getFilteredRowModel().rows.length;
+  const startIndex = filteredRowCount > 0 ? paginationState.pageIndex * paginationState.pageSize + 1 : 0;
+  const endIndex = Math.min(startIndex + paginationState.pageSize - 1, filteredRowCount);
   const hasRows = table.getRowModel().rows.length > 0;
   const noResults = hasAnyFilter && !hasRows && (tickets?.length ?? 0) > 0;
 
@@ -502,9 +516,7 @@ export default function TicketsPage() {
             <h1 className="text-xl font-bold text-slate-900">Tickets</h1>
             <p className="text-sm text-slate-500 mt-0.5">
               {tickets
-                ? hasAnyFilter
-                  ? `${filteredRowCount} of ${tickets.length} ticket${tickets.length !== 1 ? 's' : ''}`
-                  : `${tickets.length} ticket${tickets.length !== 1 ? 's' : ''}`
+                ? `${startIndex}-${endIndex} of ${filteredRowCount} ticket${filteredRowCount !== 1 ? 's' : ''}`
                 : 'Loading...'}
             </p>
           </div>
@@ -695,6 +707,86 @@ export default function TicketsPage() {
               </table>
             </div>
           )}
+        </div>
+
+        {/* Pagination controls */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pt-4">
+          <div className="flex items-center space-x-3">
+            <label className="text-sm font-medium text-slate-700">Rows per page:</label>
+            <select
+              value={paginationState.pageSize}
+              onChange={(e) => {
+                setPaginationState({ pageIndex: 0, pageSize: Number(e.target.value) });
+              }}
+              className="px-3 py-2 text-sm rounded-xl border border-slate-200 bg-slate-50 text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition"
+            >
+              {[10, 25, 50, 100].map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center space-x-4">
+            <button
+              onClick={() =>
+                setPaginationState((prev) => ({
+                  pageIndex: Math.max(prev.pageIndex - 1, 0),
+                  pageSize: prev.pageSize,
+                }))
+              }
+              disabled={paginationState.pageIndex === 0}
+              className={`
+                flex items-center gap-2 px-3 py-2 text-sm font-medium
+                ${paginationState.pageIndex === 0
+                  ? 'text-slate-400 hover:text-slate-500'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'}
+                rounded-xl transition
+              `}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              Previous
+            </button>
+
+            <span className="text-sm text-slate-600">
+              Page {paginationState.pageIndex + 1} of {Math.max(1, Math.ceil(filteredRowCount / paginationState.pageSize))}
+            </span>
+
+            <button
+              onClick={() =>
+                setPaginationState((prev) => ({
+                  pageIndex:
+                    Math.min(
+                      prev.pageIndex + 1,
+                      Math.ceil(filteredRowCount / prev.pageSize) - 1
+                    ),
+                  pageSize: prev.pageSize,
+                }))
+              }
+              disabled={
+                paginationState.pageIndex >=
+                Math.ceil(filteredRowCount / paginationState.pageSize) - 1 ||
+                filteredRowCount === 0
+              }
+              className={`
+                flex items-center gap-2 px-3 py-2 text-sm font-medium
+                ${paginationState.pageIndex >=
+                Math.ceil(filteredRowCount / paginationState.pageSize) - 1 ||
+                filteredRowCount === 0
+                  ? 'text-slate-400 hover:text-slate-500'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'}
+                rounded-xl transition
+              `}
+            >
+              Next
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {isModalOpen && (
