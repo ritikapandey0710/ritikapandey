@@ -1,9 +1,11 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { authClient } from '../lib/auth-client';
-import { fetchTicketById } from '../api';
+import { fetchTicketById, updateTicket, fetchUsers } from '../api';
 import { TicketStatus, TicketCategory, TicketPriority } from '../types/ticket';
-import { useState } from 'react';
+import { UserRole } from '@/types/role';
+import type { AuthUser } from '@/types/user';
+import { useState, useEffect } from 'react';
 
 const STATUS_LABELS: Record<TicketStatus, { label: string; color: string }> = {
   [TicketStatus.OPEN]:        { label: 'Open',        color: 'bg-blue-100 text-blue-700' },
@@ -29,6 +31,9 @@ export default function TicketDetailsPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { data: session, isPending: authPending } = authClient.useSession();
+  const user = session?.user as AuthUser | undefined;
+  const isAdmin = user?.role === UserRole.ADMIN;
 
   const { data: ticket, isLoading, isError, error } = useQuery({
     queryKey: ['ticket', id],
@@ -36,8 +41,64 @@ export default function TicketDetailsPage() {
     enabled: !!id,
   });
 
+  // State for assignee selection
+  const [selectedAssignee, setSelectedAssignee] = useState<string>('');
+  const [agents, setAgents] = useState<Array<any>>([]);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
+
+  // Fetch agents (users with AGENT role) when component mounts or ticket changes
+  useEffect(() => {
+    const fetchAgents = async () => {
+      try {
+        const users = await fetchUsers();
+        // Filter to only include agents (users with AGENT role)
+        const agentUsers = users.filter((user: any) => user.role === UserRole.AGENT);
+        setAgents(agentUsers);
+      } catch (err) {
+        console.error('Error fetching agents:', err);
+        // We'll still allow the page to load, just with empty agents list
+        setAgents([]);
+      }
+    };
+
+    fetchAgents();
+  }, []); // Empty deps - run once on mount
+
+  // Set initial selected assignee when ticket loads
+  useEffect(() => {
+    if (ticket) {
+      setSelectedAssignee(ticket.assigneeId ?? '');
+    }
+  }, [ticket]);
+
   const handleBack = () => {
     navigate(-1); // Go back to previous page
+  };
+
+  const handleSaveAssignment = async () => {
+    // Guard clause: only admins can assign tickets
+    if (!isAdmin) {
+      setSaveError('Only administrators can assign tickets');
+      setIsSaving(false);
+      return;
+    }
+
+    setIsSaving(true);
+    setSaveError(null);
+    setSaveSuccess(false);
+
+    try {
+      await updateTicket(id, { assigneeId: selectedAssignee || undefined });
+      setSaveSuccess(true);
+      // Refetch the ticket to show updated assignee
+      await queryClient.invalidateQueries({ queryKey: ['ticket', id] });
+    } catch (err: any) {
+      setSaveError(err.response?.data?.error || 'Failed to assign ticket');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   if (isLoading) {
@@ -147,17 +208,78 @@ export default function TicketDetailsPage() {
               </div>
             </div>
 
-            {!ticket.assigneeId ? (
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold text-slate-900 mb-2">Assignee</h3>
-                <p className="text-xs text-slate-500 italic">Unassigned</p>
+            {/* Assignee section */}
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold text-slate-900 mb-2">Assignee</h3>
+
+              {/* Current assignee display */}
+              <div className="mb-2">
+                {!ticket.assigneeId ? (
+                  <p className="text-xs text-slate-500 italic">Unassigned</p>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 text-xs font-bold">
+                      {ticket.assigneeId
+                        ? ticket.assigneeId.charAt(0).toUpperCase()
+                        : '?'}
+                    </div>
+                    <span className="text-slate-900">
+                      {agents.find((agent: any) => agent.id === ticket.assigneeId)?.name ||
+                        (ticket.assigneeId + ' (not an agent)')}
+                    </span>
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold text-slate-900 mb-2">Assignee</h3>
-                <p className="text-slate-900">{ticket.assigneeId}</p>
-              </div>
-            )}
+
+              {/* Assignment controls (only show if we have agents and user is admin) */}
+              {agents.length > 0 && isAdmin && (
+                <>
+                  <div className="mb-2">
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Assign to:</label>
+                    <select
+                      value={selectedAssignee}
+                      onChange={(e) => setSelectedAssignee(e.target.value)}
+                      className="block w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition"
+                    >
+                      <option value="">Unassigned</option>
+                      {agents.map((agent: any) => (
+                        <option key={agent.id} value={agent.id}>
+                          {agent.name} ({agent.email})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {saveError && (
+                    <p className="mt-1 text-xs text-red-600">{saveError}</p>
+                  )}
+                  {saveSuccess && (
+                    <p className="mt-1 text-xs text-green-600">Ticket assigned successfully!</p>
+                  )}
+
+                  {!isSaving && (
+                    <button
+                      onClick={handleSaveAssignment}
+                      className="mt-2 px-4 py-2 text-sm font-semibold text-white bg-violet-600 hover:bg-violet-700 rounded-xl transition shadow-sm shadow-violet-200"
+                    >
+                      {isSaving ? 'Saving...' : 'Assign Ticket'}
+                    </button>
+                  )}
+                  {isSaving && (
+                    <button className="mt-2 px-4 py-2 text-sm font-semibold text-white bg-violet-600 hover:bg-violet-700 rounded-xl transition shadow-sm shadow-violet-200" disabled>
+                      Saving...
+                    </button>
+                  )}
+                </>
+              )}
+
+              {/* Show message when no agents available (only for admins) */}
+              {agents.length === 0 && isAdmin && (
+                <p className="mt-2 text-xs text-slate-500 italic">
+                  No agents available to assign
+                </p>
+              )}
+            </div>
 
             <div className="mb-6">
               <h3 className="text-lg font-semibold text-slate-900 mb-2">Description</h3>
