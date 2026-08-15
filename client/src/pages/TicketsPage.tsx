@@ -5,8 +5,8 @@ import { useState, useCallback, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { TicketStatus, TicketCategory, TicketPriority, TICKET_STATUSES, TICKET_CATEGORIES } from '../types/ticket';
-import { useReactTable, getCoreRowModel, getSortedRowModel, type SortingState, type ColumnDef, flexRender } from '@tanstack/react-table';
+import { TicketStatus, TicketCategory, TicketPriority, TICKET_STATUSES, TICKET_CATEGORIES, TICKET_PRIORITIES } from '../types/ticket';
+import { useReactTable, getCoreRowModel, getSortedRowModel, getFilteredRowModel, type SortingState, type ColumnDef, type ColumnFiltersState, type FilterFn, type FilterFnOption, flexRender } from '@tanstack/react-table';
 import { ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 
 const STATUS_LABELS: Record<TicketStatus, { label: string; color: string }> = {
@@ -166,6 +166,58 @@ function CreateTicketModal({ isOpen, onClose, onSuccess }: {
   );
 }
 
+// Custom filter functions for TanStack Table (column filters + global search)
+const filterFns: Record<string, FilterFn<any>> = {
+  equals: (row, id, filterValue) => {
+    if (filterValue === '' || filterValue == null) return true;
+    return row.getValue(id) === filterValue;
+  },
+  categoryMatch: (row, id, filterValue) => {
+    if (filterValue === '' || filterValue == null) return true;
+    const cellVal = row.getValue(id);
+    if (filterValue === '__NONE__') return cellVal == null || cellVal === '';
+    return cellVal === filterValue;
+  },
+  assigneeMatch: (row, id, filterValue) => {
+    if (filterValue === '' || filterValue == null) return true;
+    const cellVal = row.getValue(id);
+    if (filterValue === '__UNASSIGNED__') return cellVal == null || cellVal === '';
+    return cellVal === filterValue;
+  },
+  createdDate: (row, id, filterValue) => {
+    if (filterValue === '' || filterValue == null) return true;
+    const raw = row.getValue(id);
+    if (!raw) return false;
+    const d = new Date(raw as string);
+    const now = new Date();
+    if (filterValue === 'today') return d.toDateString() === now.toDateString();
+    if (filterValue === 'last7') { const cut = new Date(); cut.setDate(cut.getDate() - 7); return d >= cut; }
+    if (filterValue === 'last30') { const cut = new Date(); cut.setDate(cut.getDate() - 30); return d >= cut; }
+    return true;
+  },
+  globalSearch: (row, _id, filterValue) => {
+    const q = String(filterValue ?? '').toLowerCase();
+    if (!q) return true;
+    const original = row.original as any;
+    const ticketNum = original?.ticketNumber != null ? String(original.ticketNumber) : '';
+    const title = String(original?.title || '');
+    const sender = String(original?.senderName || '');
+    const assignee = String(original?.assigneeId || '');
+    const id = String(original?.id || '');
+    return (
+      `TKT-${ticketNum.padStart(5, '0')}`.toLowerCase().includes(q) ||
+      ticketNum.toLowerCase().includes(q) ||
+      title.toLowerCase().includes(q) ||
+      sender.toLowerCase().includes(q) ||
+      assignee.toLowerCase().includes(q) ||
+      id.toLowerCase().includes(q)
+    );
+  },
+};
+
+// Helper to cast filter fn name for ColumnDef typing
+const filterOpt = (name: string): FilterFnOption<any> => name as any;
+
 export default function TicketsPage() {
   const { data: session, isPending: authPending } = authClient.useSession();
   const enabled = !authPending && !!session;
@@ -191,16 +243,46 @@ export default function TicketsPage() {
     });
   }, []);
 
-  // Fetch tickets with sorting parameters
+  // Fetch tickets
   const { data: tickets, isLoading, isError, error } = useQuery({
-    queryKey: ['tickets', sorting],
-    queryFn: () => fetchTickets({
-      sortBy: sorting.length > 0 ? sorting[0].id : undefined,
-      sortOrder: sorting.length > 0 ? (sorting[0].desc ? 'desc' : 'asc') : undefined,
-    }),
+    queryKey: ['tickets'],
+    queryFn: () => fetchTickets({}),
     enabled,
   });
 
+  // ---- Filter state (client-side, does NOT refetch) ----
+  const [globalFilter, setGlobalFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [priorityFilter, setPriorityFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [assigneeFilter, setAssigneeFilter] = useState('');
+  const [dateFilter, setDateFilter] = useState('');
+
+  // Derive available categories & assignees from the loaded ticket data
+  const availableCategories = useMemo(() => {
+    if (!tickets) return [];
+    const set = new Set<string>();
+    tickets.forEach((t: any) => { if (t.category) set.add(t.category); });
+    return Array.from(set);
+  }, [tickets]);
+
+  const availableAssignees = useMemo(() => {
+    if (!tickets) return [];
+    const set = new Set<string>();
+    tickets.forEach((t: any) => { if (t.assigneeId) set.add(t.assigneeId); });
+    return Array.from(set);
+  }, [tickets]);
+
+  const hasAnyFilter = !!(globalFilter || statusFilter || priorityFilter || categoryFilter || assigneeFilter || dateFilter);
+
+  const clearFilters = useCallback(() => {
+    setGlobalFilter('');
+    setStatusFilter('');
+    setPriorityFilter('');
+    setCategoryFilter('');
+    setAssigneeFilter('');
+    setDateFilter('');
+  }, []);
 
   // Table columns configuration
   const columns = useMemo<ColumnDef<any>[]>(() => [
@@ -213,7 +295,6 @@ export default function TicketsPage() {
         if (ticketNumber !== null && ticketNumber !== undefined) {
           return <div className="text-xs text-slate-400 font-mono">TKT-{String(ticketNumber).padStart(5, '0')}</div>;
         }
-        // Fallback to UUID id if ticketNumber is not available (e.g., before migration)
         const id = row.original.id as string;
         return <div className="text-xs text-slate-400 font-mono">TKT-{id.substring(0, 8).toUpperCase()}</div>;
       }
@@ -248,6 +329,7 @@ export default function TicketsPage() {
       accessorKey: 'status',
       header: 'Status',
       enableSorting: true,
+      filterFn: filterOpt('equals'),
       cell: ({ getValue }) => {
         const status = getValue() as TicketStatus;
         const labelInfo = STATUS_LABELS[status] || { label: status, color: 'bg-slate-100 text-slate-600' };
@@ -262,6 +344,7 @@ export default function TicketsPage() {
       accessorKey: 'category',
       header: 'Category',
       enableSorting: true,
+      filterFn: filterOpt('categoryMatch'),
       cell: ({ getValue }) => {
         const category = getValue() as TicketCategory | null;
         if (!category) return <span className="text-xs text-slate-500 italic">—</span>;
@@ -281,6 +364,7 @@ export default function TicketsPage() {
       accessorKey: 'priority',
       header: 'Priority',
       enableSorting: true,
+      filterFn: filterOpt('equals'),
       cell: ({ getValue }) => {
         const priority = getValue() as TicketPriority;
         const labelInfo = PRIORITY_LABELS[priority] || { label: priority, color: 'bg-slate-100 text-slate-600' };
@@ -292,9 +376,10 @@ export default function TicketsPage() {
       },
     },
     {
-      accessorKey: 'assignedTo',
+      accessorKey: 'assigneeId',
       header: 'Assigned To',
       enableSorting: true,
+      filterFn: filterOpt('assigneeMatch'),
       cell: ({ getValue }) => {
         const assignedTo = getValue() as string | null;
         if (!assignedTo) return <span className="text-xs text-slate-500 italic">—</span>;
@@ -312,6 +397,7 @@ export default function TicketsPage() {
       accessorKey: 'createdAt',
       header: 'Created',
       enableSorting: true,
+      filterFn: filterOpt('createdDate'),
       cell: ({ getValue }) => {
         const date = new Date(getValue() as string);
         return (
@@ -351,23 +437,41 @@ export default function TicketsPage() {
     },
   ], []);
 
+  // Build column filters from the dropdown states
+  const columnFilters = useMemo<ColumnFiltersState>(() => {
+    const filters: ColumnFiltersState = [];
+    if (statusFilter) filters.push({ id: 'status', value: statusFilter });
+    if (priorityFilter) filters.push({ id: 'priority', value: priorityFilter });
+    if (categoryFilter) filters.push({ id: 'category', value: categoryFilter });
+    if (assigneeFilter) filters.push({ id: 'assigneeId', value: assigneeFilter });
+    if (dateFilter) filters.push({ id: 'createdAt', value: dateFilter });
+    return filters;
+  }, [statusFilter, priorityFilter, categoryFilter, assigneeFilter, dateFilter]);
+
   // Set up the table
   const table = useReactTable({
     data: tickets || [],
     columns,
     getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    state: { sorting },
+    filterFns,
+    globalFilterFn: 'globalSearch' as any,
+    state: { sorting, columnFilters, globalFilter },
     onSortingChange: setSorting,
+    onGlobalFilterChange: setGlobalFilter,
     getRowId: (row) => {
-      // Use ticketNumber if available, otherwise fall back to id
-      const ticketNumber = (row.original as any).ticketNumber;
+      const ticketNumber = (row as any).ticketNumber;
       if (ticketNumber !== null && ticketNumber !== undefined) {
         return ticketNumber.toString();
       }
-      return (row.original as any).id;
+      return (row as any).id;
     },
   });
+
+  const filteredRowCount = table.getFilteredRowModel().rows.length;
+  const hasRows = table.getRowModel().rows.length > 0;
+  const noResults = hasAnyFilter && !hasRows && (tickets?.length ?? 0) > 0;
 
   if (isLoading) {
     return (
@@ -397,7 +501,11 @@ export default function TicketsPage() {
           <div>
             <h1 className="text-xl font-bold text-slate-900">Tickets</h1>
             <p className="text-sm text-slate-500 mt-0.5">
-              {tickets ? `${tickets.length} ticket${tickets.length !== 1 ? 's' : ''}` : 'Loading...'}
+              {tickets
+                ? hasAnyFilter
+                  ? `${filteredRowCount} of ${tickets.length} ticket${tickets.length !== 1 ? 's' : ''}`
+                  : `${tickets.length} ticket${tickets.length !== 1 ? 's' : ''}`
+                : 'Loading...'}
             </p>
           </div>
           <button
@@ -411,9 +519,106 @@ export default function TicketsPage() {
           </button>
         </div>
 
+        {/* Filter toolbar */}
+        <div className="mb-4 bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+          <div className="flex flex-col gap-3">
+            <div className="relative">
+              <svg className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                type="text"
+                value={globalFilter}
+                onChange={(e) => setGlobalFilter(e.target.value)}
+                placeholder="Search tickets..."
+                className="w-full pl-9 pr-9 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition"
+              />
+              {globalFilter && (
+                <button
+                  onClick={() => setGlobalFilter('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
+                  aria-label="Clear search"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="px-3 py-2 text-sm rounded-xl border border-slate-200 bg-slate-50 text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition"
+              >
+                <option value="">All Statuses</option>
+                {TICKET_STATUSES.map(s => (
+                  <option key={s} value={s}>{STATUS_LABELS[s].label}</option>
+                ))}
+              </select>
+
+              <select
+                value={priorityFilter}
+                onChange={(e) => setPriorityFilter(e.target.value)}
+                className="px-3 py-2 text-sm rounded-xl border border-slate-200 bg-slate-50 text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition"
+              >
+                <option value="">All Priorities</option>
+                {TICKET_PRIORITIES.map(p => (
+                  <option key={p} value={p}>{PRIORITY_LABELS[p].label}</option>
+                ))}
+              </select>
+
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="px-3 py-2 text-sm rounded-xl border border-slate-200 bg-slate-50 text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition"
+              >
+                <option value="">All Categories</option>
+                {availableCategories.map(c => (
+                  <option key={c} value={c}>{CATEGORY_LABELS[c as TicketCategory] || c}</option>
+                ))}
+                <option value="__NONE__">Uncategorized</option>
+              </select>
+
+              <select
+                value={assigneeFilter}
+                onChange={(e) => setAssigneeFilter(e.target.value)}
+                className="px-3 py-2 text-sm rounded-xl border border-slate-200 bg-slate-50 text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition"
+              >
+                <option value="">All Assignees</option>
+                {availableAssignees.map(a => (
+                  <option key={a} value={a}>{a}</option>
+                ))}
+                <option value="__UNASSIGNED__">Unassigned</option>
+              </select>
+
+              <select
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                className="px-3 py-2 text-sm rounded-xl border border-slate-200 bg-slate-50 text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition"
+              >
+                <option value="">All Dates</option>
+                <option value="today">Today</option>
+                <option value="last7">Last 7 Days</option>
+                <option value="last30">Last 30 Days</option>
+              </select>
+
+              {hasAnyFilter && (
+                <button
+                  onClick={clearFilters}
+                  className="px-3 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition"
+                >
+                  Clear Filters
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* Table card */}
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-          {tickets?.length === 0 ? (
+          {(tickets?.length ?? 0) === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mb-3">
                 <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -422,6 +627,22 @@ export default function TicketsPage() {
               </div>
               <p className="text-sm font-medium text-slate-900">No tickets yet</p>
               <p className="text-xs text-slate-500 mt-1">Create your first ticket to get started</p>
+            </div>
+          ) : noResults ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mb-3">
+                <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+              <p className="text-sm font-medium text-slate-900">No tickets found</p>
+              <p className="text-xs text-slate-500 mt-1">Try adjusting your filters</p>
+              <button
+                onClick={clearFilters}
+                className="mt-4 px-4 py-2 text-sm font-semibold text-violet-600 hover:text-violet-800 hover:bg-violet-50 rounded-xl transition"
+              >
+                Clear Filters
+              </button>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -458,7 +679,7 @@ export default function TicketsPage() {
                   ))}
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {table.getRowModel().rows.map((row) => (
+                  {table.getRowModel() && table.getRowModel().rows.map((row) => (
                     <tr key={row.id} className="hover:bg-slate-50 transition">
                       {row.getVisibleCells().map((cell) => (
                         <td

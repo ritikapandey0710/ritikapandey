@@ -8,8 +8,8 @@ const prisma = new PrismaClient({
 });
 
 async function main() {
-  const users = await prisma.user.findMany();
-  console.log("Users:", JSON.stringify(users, null, 2));
+  const accounts = await prisma.account.findMany();
+  console.log("Accounts:", JSON.stringify(accounts, null, 2));
 }
 
 main()

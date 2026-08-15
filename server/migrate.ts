@@ -34,6 +34,16 @@ async function main() {
       ALTER TABLE "Ticket" ADD COLUMN IF NOT EXISTS "senderEmail" TEXT NOT NULL;
     `;
     console.log('Added column senderEmail');
+
+    await prisma.$executeRaw`
+      ALTER TABLE "Ticket" ADD COLUMN IF NOT EXISTS "ticketNumber" SERIAL;
+    `;
+    console.log('Added column ticketNumber');
+
+    await prisma.$executeRaw`
+      CREATE UNIQUE INDEX IF NOT EXISTS "Ticket_ticketNumber_key" ON "Ticket"("ticketNumber");
+    `;
+    console.log('Added unique index on ticketNumber');
   } catch (e) {
     console.error('Error applying migration:', e);
     process.exit(1);

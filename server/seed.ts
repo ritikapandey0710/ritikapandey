@@ -1,13 +1,41 @@
-import { auth } from "./src/auth";
-import { prisma } from "./src/prisma";
+import { PrismaClient } from "./src/generated/prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { betterAuth } from "better-auth";
+import { prismaAdapter } from "@better-auth/prisma-adapter";
 
-// Override DATABASE_URL to ensure we're using the correct database
-process.env.DATABASE_URL = "postgresql://postgres:230023107062@localhost:5432/helpdesk?schema=public";
+// Hardcode the correct database URL so this works even if a system env var overrides it
+const DATABASE_URL = "postgresql://postgres:230023107062@localhost:5432/helpdesk?schema=public";
+
+// We need the auth instance to use the SAME database, so construct prisma here and build auth manually
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: DATABASE_URL })
+});
+
+const auth = betterAuth({
+  baseURL: "http://localhost:3001",
+  database: prismaAdapter(prisma, {
+    provider: "postgresql",
+  }),
+  emailAndPassword: {
+    enabled: true,
+  },
+  secret: "my-helpdesk-project-secret-key-2026-very-long-string-changed",
+  user: {
+    additionalFields: {
+      role: {
+        type: "string",
+        required: false,
+        defaultValue: "AGENT",
+        input: false,
+      },
+    },
+  },
+});
 
 async function main() {
   // Create admin user
-  const adminEmail = process.env.ADMIN_EMAIL ?? "admin@example.com";
-  const adminPassword = process.env.ADMIN_PASSWORD ?? "password123";
+  const adminEmail = "admin@example.com";
+  const adminPassword = "password123";
 
   console.log(`Seeding admin user: ${adminEmail}`);
 

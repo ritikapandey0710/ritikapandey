@@ -8,8 +8,16 @@ const prisma = new PrismaClient({
 });
 
 async function main() {
-  const users = await prisma.user.findMany();
-  console.log("Users:", JSON.stringify(users, null, 2));
+  const ticketCount = await prisma.ticket.count();
+  console.log("Ticket count:", ticketCount);
+
+  const userCount = await prisma.user.count();
+  console.log("User count:", userCount);
+
+  if (ticketCount > 0) {
+    const sample = await prisma.ticket.findFirst();
+    console.log("Sample ticket:", JSON.stringify(sample, null, 2));
+  }
 }
 
 main()

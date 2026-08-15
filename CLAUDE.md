@@ -191,6 +191,129 @@ When adding a new ticket-related enum, follow the same pattern:
 3. Use `z.union([z.literal(...), ...])` in Zod schemas — not `z.nativeEnum()`.
 4. Type lookup maps (e.g. `STATUS_LABELS`) as `Record<TicketStatus, ...>` so TypeScript enforces exhaustiveness.
 
+## TicketsPage — Protected Working Functionality
+
+The TicketsPage is a critical working part of the Help Desk application.
+
+### Current required functionality
+
+The TicketsPage MUST continue to have:
+
+1. Ticket rows visible correctly.
+2. Correct ticket count displayed.
+3. TanStack React Table used for the ticket table.
+4. Client-side sorting.
+5. Sorting available for the existing sortable ticket columns.
+6. Client-side filtering.
+7. Search filtering.
+8. Status filter.
+9. Priority filter.
+10. Category filter.
+11. Assigned To filter.
+12. Created Date filter.
+13. Multiple filters working together.
+14. Clear Filters functionality.
+15. Dynamic filtered/total ticket count.
+16. Proper "No tickets found" empty state when filters return zero results.
+17. Sorting must continue to work after filters are applied.
+18. Existing Actions column/functionality must continue working.
+19. Existing TicketsPage UI/design must not be unnecessarily redesigned.
+
+### Data architecture
+
+The current TicketsPage loads tickets through the existing tickets API and uses the loaded ticket array with TanStack React Table.
+
+Filtering and sorting are currently handled client-side.
+
+Do NOT add sorting or filtering state to the React Query `queryKey` unless there is a deliberate architectural decision to move filtering/sorting to the backend.
+
+The existing ticket query must remain stable so changing table sorting/filtering does not accidentally cause the ticket data to disappear.
+
+The expected general data flow is:
+
+```
+API
+→ tickets array
+→ TanStack React Table
+→ filtering
+→ sorting
+→ rendered rows
+```
+
+### Protected behavior
+
+Before modifying TicketsPage.tsx, always inspect the existing implementation.
+
+Do NOT blindly replace the table, query, columns, or filtering/sorting implementation.
+
+When adding a new feature to TicketsPage:
+- preserve existing sorting
+- preserve existing filtering
+- preserve search
+- preserve all existing filter options
+- preserve Clear Filters
+- preserve ticket counts
+- preserve empty states
+- preserve Actions
+- preserve the existing UI unless the user explicitly requests a redesign
+
+### Debugging rule
+
+If ticket rows disappear, DO NOT assume sorting is the cause.
+
+Debug the complete data flow:
+
+```
+API response
+→ tickets state
+→ TanStack Table data
+→ getCoreRowModel()
+→ filtering
+→ sorting
+→ getRowModel().rows
+→ JSX rendering
+→ DOM/CSS
+```
+
+Before making speculative changes, verify:
+
+- tickets.length
+- table.getRowModel().rows.length
+- API response
+- browser console
+- table rendering JSX
+
+Do not claim the TicketsPage is fixed unless actual ticket rows have been verified in the browser.
+
+### Change safety rule
+
+Whenever modifying TicketsPage functionality:
+
+1. Inspect the existing code first.
+2. Make the smallest necessary change.
+3. Do not remove existing working functionality.
+4. Do not modify unrelated files.
+5. Run the client build/typecheck after changes.
+6. Verify ticket rows are visible.
+7. Verify sorting still works.
+8. Verify filtering still works.
+9. Verify search still works.
+10. Verify Clear Filters works.
+11. Verify combined filters work.
+12. Verify the Actions column still works.
+
+The current working TicketsPage behavior should be treated as protected functionality unless the user explicitly asks to change or remove it.
+
+### Future feature additions
+
+When the user asks to add a new TicketsPage feature, integrate it into the existing implementation rather than replacing the existing sorting/filtering system.
+
+Before completing the task, regression-test all existing TicketsPage functionality.
+
+Do not sacrifice existing working behavior to implement a new feature.
+
+---
+
 ### Contributing
 - Follow the existing code style (ESLint + Prettier).
 - Write tests for new features.
