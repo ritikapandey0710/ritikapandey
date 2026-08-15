@@ -72,6 +72,7 @@ export async function updateTicket(id: string, ticketData: Partial<{
   title: string;
   description?: string;
   status?: string;
+  category?: string | null;
   assigneeId?: string;
 }>) {
   const url = `/tickets/${id}`;

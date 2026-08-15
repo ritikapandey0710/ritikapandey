@@ -27,22 +27,48 @@ const PRIORITY_LABELS: Record<TicketPriority, { label: string; color: string }> 
   [TicketPriority.URGENT]:   { label: 'Urgent',   color: 'bg-red-100 text-red-700' },
 };
 
+// Arrays for select options iteration
+const TICKET_STATUSES: TicketStatus[] = [TicketStatus.OPEN, TicketStatus.IN_PROGRESS, TicketStatus.RESOLVED, TicketStatus.CLOSED];
+const TICKET_CATEGORIES: TicketCategory[] = [TicketCategory.GENERAL_QUESTION, TicketCategory.TECHNICAL_QUESTION, TicketCategory.REFUND_REQUEST];
+
+// Helper functions to get labels (explicit assignment instead of regex/object lookup)
+const getStatusLabel = (status: TicketStatus): string => {
+  switch (status) {
+    case TicketStatus.OPEN: return 'Open';
+    case TicketStatus.IN_PROGRESS: return 'In Progress';
+    case TicketStatus.RESOLVED: return 'Resolved';
+    case TicketStatus.CLOSED: return 'Closed';
+    default: return '';
+  }
+};
+
+const getCategoryLabel = (category: TicketCategory): string => {
+  switch (category) {
+    case TicketCategory.GENERAL_QUESTION: return 'General Question';
+    case TicketCategory.TECHNICAL_QUESTION: return 'Technical Question';
+    case TicketCategory.REFUND_REQUEST: return 'Refund Request';
+    default: return '';
+  }
+};
+
 export default function TicketDetailsPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { data: session, isPending: authPending } = authClient.useSession();
+  const { data: session } = authClient.useSession();
   const user = session?.user as AuthUser | undefined;
   const isAdmin = user?.role === UserRole.ADMIN;
 
   const { data: ticket, isLoading, isError, error } = useQuery({
     queryKey: ['ticket', id],
-    queryFn: () => fetchTicketById(id),
+    queryFn: () => fetchTicketById(id!),
     enabled: !!id,
   });
 
-  // State for assignee selection
+  // State for editing fields
   const [selectedAssignee, setSelectedAssignee] = useState<string>('');
+  const [selectedStatus, setSelectedStatus] = useState<TicketStatus | ''>('');
+  const [selectedCategory, setSelectedCategory] = useState<TicketCategory | ''>('');
   const [agents, setAgents] = useState<Array<any>>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -66,10 +92,12 @@ export default function TicketDetailsPage() {
     fetchAgents();
   }, []); // Empty deps - run once on mount
 
-  // Set initial selected assignee when ticket loads
+  // Set initial values when ticket loads
   useEffect(() => {
     if (ticket) {
-      setSelectedAssignee(ticket.assigneeId ?? '');
+      setSelectedAssignee(ticket.assigneeId || '');
+      setSelectedStatus((ticket.status ?? '') as TicketStatus | '');
+      setSelectedCategory((ticket.category ?? '') as TicketCategory | '');
     }
   }, [ticket]);
 
@@ -77,10 +105,10 @@ export default function TicketDetailsPage() {
     navigate(-1); // Go back to previous page
   };
 
-  const handleSaveAssignment = async () => {
-    // Guard clause: only admins can assign tickets
+  const handleSaveChanges = async () => {
+    // Guard clause: only admins can update tickets
     if (!isAdmin) {
-      setSaveError('Only administrators can assign tickets');
+      setSaveError('Only administrators can update tickets');
       setIsSaving(false);
       return;
     }
@@ -90,12 +118,16 @@ export default function TicketDetailsPage() {
     setSaveSuccess(false);
 
     try {
-      await updateTicket(id, { assigneeId: selectedAssignee || undefined });
+      await updateTicket(id!, {
+        assigneeId: selectedAssignee || undefined,
+        status: selectedStatus as TicketStatus || undefined,
+        category: selectedCategory === '' ? null : (selectedCategory as TicketCategory || undefined),
+      });
       setSaveSuccess(true);
-      // Refetch the ticket to show updated assignee
-      await queryClient.invalidateQueries({ queryKey: ['ticket', id] });
+      // Refetch the ticket to show updated values
+      await queryClient.invalidateQueries({ queryKey: ['ticket', id!] });
     } catch (err: any) {
-      setSaveError(err.response?.data?.error || 'Failed to assign ticket');
+      setSaveError(err.response?.data?.error || 'Failed to update ticket');
     } finally {
       setIsSaving(false);
     }
@@ -104,7 +136,7 @@ export default function TicketDetailsPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[calc(100vh-56px)]">
-        <div className="w-8 h-8 border-4 border-violet-600 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-4 border-violet-600 border-t-transparent rounded-full animate-spin" data-testid="loading-indicator" />
       </div>
     );
   }
@@ -168,7 +200,7 @@ export default function TicketDetailsPage() {
                 <span>
                   <strong>Status:</strong>
                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${STATUS_LABELS[ticket.status as TicketStatus].color}`}>
-                    {STATUS_LABELS[ticket.status as TicketStatus].label}
+                    {getStatusLabel(ticket.status as TicketStatus)}
                   </span>
                 </span>
                 <span>
@@ -185,7 +217,7 @@ export default function TicketDetailsPage() {
                       ticket.category === 'TECHNICAL_QUESTION' ? 'bg-blue-100 text-blue-700' :
                       'bg-pink-100 text-pink-700'
                     }`}>
-                      {CATEGORY_LABELS[ticket.category as TicketCategory]}
+                      {getCategoryLabel(ticket.category as TicketCategory)}
                     </span>
                   ) : (
                     <span className="text-xs text-slate-500 italic">—</span>
@@ -194,109 +226,243 @@ export default function TicketDetailsPage() {
               </div>
             </div>
 
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold text-slate-900 mb-2">Sender Information</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm font-medium text-slate-700">Name</p>
-                  <p className="text-slate-900">{ticket.senderName}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-700">Email</p>
-                  <p className="text-slate-900 break-all">{ticket.senderEmail}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Assignee section */}
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold text-slate-900 mb-2">Assignee</h3>
-
-              {/* Current assignee display */}
-              <div className="mb-2">
-                {!ticket.assigneeId ? (
-                  <p className="text-xs text-slate-500 italic">Unassigned</p>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 text-xs font-bold">
-                      {ticket.assigneeId
-                        ? ticket.assigneeId.charAt(0).toUpperCase()
-                        : '?'}
+            <div className="grid grid-cols-12 gap-6">
+              {/* Left Column - Display Information (spans 8 columns) */}
+              <div className="col-span-8">
+                <div className="mb-6">
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">Sender Information</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm font-medium text-slate-700">Name</p>
+                      <p className="text-slate-900">{ticket.senderName}</p>
                     </div>
-                    <span className="text-slate-900">
-                      {agents.find((agent: any) => agent.id === ticket.assigneeId)?.name ||
-                        (ticket.assigneeId + ' (not an agent)')}
+                    <div>
+                      <p className="text-sm font-medium text-slate-700">Email</p>
+                      <p className="text-slate-900 break-all">{ticket.senderEmail}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Assignee display */}
+                <div className="mb-6">
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">Assignee</h3>
+
+                  {/* Current assignee display */}
+                  <div className="mb-2">
+                    {!ticket.assigneeId ? (
+                      <p className="text-xs text-slate-500 italic">Unassigned</p>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 text-xs font-bold" data-testid="assignee-avatar">
+                          {ticket.assigneeId
+                            ? ticket.assigneeId.charAt(0).toUpperCase()
+                            : '?'}
+                        </div>
+                        <span className="text-slate-900" data-testid="assignee-name">
+                          {agents.find((agent: any) => agent.id === ticket.assigneeId)?.name ||
+                            (ticket.assigneeId + ' (not an agent)')}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Status display */}
+                <div className="mb-6">
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">Status</h3>
+
+                  {/* Current status display */}
+                  <div className="mb-2">
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${STATUS_LABELS[ticket.status as TicketStatus].color}`}>
+                      {STATUS_LABELS[ticket.status as TicketStatus].label}
                     </span>
                   </div>
-                )}
+                </div>
+
+                {/* Category display */}
+                <div className="mb-6">
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">Category</h3>
+
+                  {/* Current category display */}
+                  <div className="mb-2">
+                    {ticket.category ? (
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                        ticket.category === 'GENERAL_QUESTION' ? 'bg-violet-100 text-violet-700' :
+                        ticket.category === 'TECHNICAL_QUESTION' ? 'bg-blue-100 text-blue-700' :
+                        'bg-pink-100 text-pink-700'
+                      }`}>
+                        {CATEGORY_LABELS[ticket.category as TicketCategory]}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-slate-500 italic">—</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mb-6">
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">Description</h3>
+                  <p className="text-slate-700 whitespace-pre-line">{ticket.body || 'No description provided'}</p>
+                </div>
+
+                <div className="mb-6">
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">Timestamps</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm font-medium text-slate-700">Created At</p>
+                      <p className="text-slate-900">{new Date(ticket.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                    </div>
+                    {ticket.updatedAt && (
+                      <div>
+                        <p className="text-sm font-medium text-slate-700">Updated At</p>
+                        <p className="text-slate-900">{new Date(ticket.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
 
-              {/* Assignment controls (only show if we have agents and user is admin) */}
-              {agents.length > 0 && isAdmin && (
-                <>
-                  <div className="mb-2">
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Assign to:</label>
-                    <select
-                      value={selectedAssignee}
-                      onChange={(e) => setSelectedAssignee(e.target.value)}
-                      className="block w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition"
-                    >
-                      <option value="">Unassigned</option>
-                      {agents.map((agent: any) => (
-                        <option key={agent.id} value={agent.id}>
-                          {agent.name} ({agent.email})
-                        </option>
-                      ))}
-                    </select>
+              {/* Right Column - Edit Controls (spans 4 columns) */}
+              <div className="col-span-4">
+                {/* Assignee controls (only show if we have agents and user is admin) */}
+                {agents.length > 0 && isAdmin && (
+                  <div className="mb-6">
+                    <h3 className="text-lg font-semibold text-slate-900 mb-2">Assignee</h3>
+
+                    <div className="mb-2 flex flex-col gap-1">
+                      <label htmlFor="assign-to-select" className="text-sm font-medium text-slate-700">Assign to:</label>
+                      <select
+                        id="assign-to-select"
+                        value={selectedAssignee}
+                        onChange={(e) => setSelectedAssignee(e.target.value)}
+                        className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition"
+                      >
+                        <option value="">Unassigned</option>
+                        {agents.map((agent: any) => (
+                          <option key={agent.id} value={agent.id}>
+                            {agent.name} ({agent.email})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {saveError && (
+                      <p className="mt-1 text-xs text-red-600">{saveError}</p>
+                    )}
+                    {saveSuccess && (
+                      <p className="mt-1 text-xs text-green-600">Changes saved successfully!</p>
+                    )}
+
+                    {!isSaving && (
+                      <button
+                        onClick={handleSaveChanges}
+                        className="mt-2 px-4 py-2 text-sm font-semibold text-white bg-violet-600 hover:bg-violet-700 rounded-xl transition shadow-sm shadow-violet-200"
+                      >
+                        {isSaving ? 'Saving...' : 'Save Changes'}
+                      </button>
+                    )}
+                    {isSaving && (
+                      <button className="mt-2 px-4 py-2 text-sm font-semibold text-white bg-violet-600 hover:bg-violet-700 rounded-xl transition shadow-sm shadow-violet-200" disabled>
+                        Saving...
+                      </button>
+                    )}
                   </div>
+                )}
 
-                  {saveError && (
-                    <p className="mt-1 text-xs text-red-600">{saveError}</p>
-                  )}
-                  {saveSuccess && (
-                    <p className="mt-1 text-xs text-green-600">Ticket assigned successfully!</p>
-                  )}
+                {/* Show message when no agents available (only for admins) */}
+                {agents.length === 0 && isAdmin && (
+                  <div className="mb-6">
+                    <p className="mt-2 text-xs text-slate-500 italic">
+                      No agents available to assign
+                    </p>
+                  </div>
+                )}
 
-                  {!isSaving && (
-                    <button
-                      onClick={handleSaveAssignment}
-                      className="mt-2 px-4 py-2 text-sm font-semibold text-white bg-violet-600 hover:bg-violet-700 rounded-xl transition shadow-sm shadow-violet-200"
-                    >
-                      {isSaving ? 'Saving...' : 'Assign Ticket'}
-                    </button>
-                  )}
-                  {isSaving && (
-                    <button className="mt-2 px-4 py-2 text-sm font-semibold text-white bg-violet-600 hover:bg-violet-700 rounded-xl transition shadow-sm shadow-violet-200" disabled>
-                      Saving...
-                    </button>
-                  )}
-                </>
-              )}
+                {/* Status controls (only show if user is admin) */}
+                {isAdmin && (
+                  <div className="mb-6">
+                    <h3 className="text-lg font-semibold text-slate-900 mb-2">Status</h3>
 
-              {/* Show message when no agents available (only for admins) */}
-              {agents.length === 0 && isAdmin && (
-                <p className="mt-2 text-xs text-slate-500 italic">
-                  No agents available to assign
-                </p>
-              )}
-            </div>
+                    <div className="mb-2 flex flex-col gap-1">
+                      <label htmlFor="status-select" className="text-sm font-medium text-slate-700">Status:</label>
+                      <select
+                        id="status-select"
+                        value={selectedStatus}
+                        onChange={(e) => setSelectedStatus(e.target.value as TicketStatus)}
+                        className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition"
+                      >
+                        {TICKET_STATUSES.map((status: TicketStatus) => (
+                          <option key={status} value={status}>
+                            {getStatusLabel(status)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold text-slate-900 mb-2">Description</h3>
-              <p className="text-slate-700 whitespace-pre-line">{ticket.body || 'No description provided'}</p>
-            </div>
+                    {saveError && (
+                      <p className="mt-1 text-xs text-red-600">{saveError}</p>
+                    )}
+                    {saveSuccess && (
+                      <p className="mt-1 text-xs text-green-600">Changes saved successfully!</p>
+                    )}
 
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold text-slate-900 mb-2">Timestamps</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm font-medium text-slate-700">Created At</p>
-                  <p className="text-slate-900">{new Date(ticket.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
-                </div>
-                {ticket.updatedAt && (
-                  <div>
-                    <p className="text-sm font-medium text-slate-700">Updated At</p>
-                    <p className="text-slate-900">{new Date(ticket.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                    {!isSaving && (
+                      <button
+                        onClick={handleSaveChanges}
+                        className="mt-2 px-4 py-2 text-sm font-semibold text-white bg-violet-600 hover:bg-violet-700 rounded-xl transition shadow-sm shadow-violet-200"
+                      >
+                        {isSaving ? 'Saving...' : 'Save Changes'}
+                      </button>
+                    )}
+                    {isSaving && (
+                      <button className="mt-2 px-4 py-2 text-sm font-semibold text-white bg-violet-600 hover:bg-violet-700 rounded-xl transition shadow-sm shadow-violet-200" disabled>
+                        Saving...
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Category controls (only show if user is admin) */}
+                {isAdmin && (
+                  <div className="mb-6">
+                    <h3 className="text-lg font-semibold text-slate-900 mb-2">Category</h3>
+
+                    <div className="mb-2 flex flex-col gap-1">
+                      <label htmlFor="category-select" className="text-sm font-medium text-slate-700">Category:</label>
+                      <select
+                        id="category-select"
+                        value={selectedCategory}
+                        onChange={(e) => setSelectedCategory(e.target.value as TicketCategory)}
+                        className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition"
+                      >
+                        <option value="">— None —</option>
+                        {TICKET_CATEGORIES.map((category: TicketCategory) => (
+                          <option key={category} value={category}>
+                            {getCategoryLabel(category)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {saveError && (
+                      <p className="mt-1 text-xs text-red-600">{saveError}</p>
+                    )}
+                    {saveSuccess && (
+                      <p className="mt-1 text-xs text-green-600">Changes saved successfully!</p>
+                    )}
+
+                    {!isSaving && (
+                      <button
+                        onClick={handleSaveChanges}
+                        className="mt-2 px-4 py-2 text-sm font-semibold text-white bg-violet-600 hover:bg-violet-700 rounded-xl transition shadow-sm shadow-violet-200"
+                      >
+                        {isSaving ? 'Saving...' : 'Save Changes'}
+                      </button>
+                    )}
+                    {isSaving && (
+                      <button className="mt-2 px-4 py-2 text-sm font-semibold text-white bg-violet-600 hover:bg-violet-700 rounded-xl transition shadow-sm shadow-violet-200" disabled>
+                        Saving...
+                      </button>
+                    )}
                   </div>
                 )}
               </div>

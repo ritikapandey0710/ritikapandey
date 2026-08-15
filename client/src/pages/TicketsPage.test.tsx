@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
+import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import TicketsPage from './TicketsPage';
 
 // Mock auth client
@@ -56,7 +57,11 @@ function renderPage() {
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <TicketsPage />
+      <MemoryRouter>
+        <Routes>
+          <Route path="*" element={<TicketsPage />} />
+        </Routes>
+      </MemoryRouter>
     </QueryClientProvider>
   );
 }

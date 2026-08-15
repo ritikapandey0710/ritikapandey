@@ -133,7 +133,13 @@ export async function updateTicket(req: any, res: any) {
     if (!validPriorities.includes(priority)) return res.status(400).json({ error: "Invalid priority value" });
     data.priority = priority;
   }
-  if (category !== undefined) data.category = category;
+  if (category !== undefined) {
+    const validCategories = [null, 'GENERAL_QUESTION', 'TECHNICAL_QUESTION', 'REFUND_REQUEST'];
+    if (!validCategories.includes(category)) {
+      return res.status(400).json({ error: "Invalid category value" });
+    }
+    data.category = category;
+  }
   if (senderName !== undefined) data.senderName = senderName;
   if (senderEmail !== undefined) data.senderEmail = senderEmail;
   if (assigneeId !== undefined) data.assigneeId = assigneeId;

@@ -1,25 +1,27 @@
-import { renderWithQuery } from '@/test/render-utils';
-import { screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import TicketDetailsPage from './TicketDetailsPage';
-
 // Mock the API functions
-vi.mock('@/api', () => ({
+vi.mock('../api', () => ({
   fetchTicketById: vi.fn(),
   updateTicket: vi.fn(),
   fetchUsers: vi.fn(),
 }));
 
 // Mock authClient
-vi.mock('@/lib/auth-client', () => {
-  const authClient = {
+vi.mock('../lib/auth-client', () => ({
+  authClient: {
     useSession: vi.fn(),
     signIn: { email: vi.fn() },
     signUp: { email: vi.fn() },
     signOut: vi.fn(),
-  };
-  return { authClient };
-});
+  },
+}));
+
+import { renderWithQuery } from '../test/render-utils';
+import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import TicketDetailsPage from './TicketDetailsPage';
+import {authClient} from '../lib/auth-client';
+import {fetchTicketById, updateTicket, fetchUsers} from '../api';
+import {Routes, Route} from 'react-router-dom';
 
 describe('TicketDetailsPage', () => {
   const mockTicket = {
@@ -51,28 +53,36 @@ describe('TicketDetailsPage', () => {
 
   it('displays ticket details with assigned agent', async () => {
     // Setup mocks
-    (require('@/lib/auth-client').authClient.useSession as ReturnType<typeof vi.fn>).mockReturnValue({
+    authClient.useSession.mockReturnValue({
       data: { user: mockAdminUser },
       isPending: false,
     });
-    (require('@/api').fetchTicketById as ReturnType<typeof vi.fn>).mockResolvedValue(mockTicket);
-    (require('@/api').fetchUsers as ReturnType<typeof vi.fn>).mockResolvedValue(mockAgents);
+    const fetchTicketByIdMock = vi.mocked(fetchTicketById);
+    fetchTicketByIdMock.mockResolvedValue(mockTicket);
+    const fetchUsersMock = vi.mocked(fetchUsers);
+    fetchUsersMock.mockResolvedValue(mockAgents);
 
-    // Render component
-    renderWithQuery(<TicketDetailsPage />, {
-      route: '/tickets/1',
-    });
+    // Render component with routing
+    renderWithQuery(
+      <Routes>
+        <Route path="/tickets/:id" element={<TicketDetailsPage />} />
+      </Routes>,
+      {
+        route: '/tickets/1',
+      }
+    );
 
     // Check loading state disappears
     expect(await screen.findByText(/Test Ticket/i)).toBeInTheDocument();
 
     // Check assignee display shows agent name
-    expect(screen.getByText(/Agent One/i)).toBeInTheDocument();
-    expect(screen.getByTestId(/assignee-avatar/i)).toHaveTextContent('A'); // First letter
+    expect(screen.getByTestId('assignee-name')).toHaveTextContent('Agent One');
+    expect(screen.getByTestId('assignee-avatar')).toHaveTextContent('A'); // First letter
 
     // Check assignment controls are visible for admin
     expect(screen.getByLabelText(/assign to:/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /assign ticket/i })).toBeInTheDocument();
+    const assigneeSection = screen.getByRole('heading', { level: 3, name: /assignee/i });
+    expect(within(assigneeSection).getByRole('button', { name: /save changes/i })).toBeInTheDocument();
   });
 
   it('shows invalid assignee warning when assignee is not an agent', async () => {
@@ -81,21 +91,29 @@ describe('TicketDetailsPage', () => {
       assigneeId: 'invalid-user-id', // Not in agents list
     };
 
-    (require('@/lib/auth-client').authClient.useSession as ReturnType<typeof vi.fn>).mockReturnValue({
+    // Setup mocks
+    authClient.useSession.mockReturnValue({
       data: { user: mockAdminUser },
       isPending: false,
     });
-    (require('@/api').fetchTicketById as ReturnType<typeof vi.fn>).mockResolvedValue(ticketWithInvalidAssignee);
-    (require('@/api').fetchUsers as ReturnType<typeof vi.fn>).mockResolvedValue(mockAgents);
+    const fetchTicketByIdMock = vi.mocked(fetchTicketById);
+    fetchTicketByIdMock.mockResolvedValue(ticketWithInvalidAssignee);
+    const fetchUsersMock = vi.mocked(fetchUsers);
+    fetchUsersMock.mockResolvedValue(mockAgents);
 
-    renderWithQuery(<TicketDetailsPage />, {
-      route: '/tickets/1',
-    });
+    renderWithQuery(
+      <Routes>
+        <Route path="/tickets/:id" element={<TicketDetailsPage />} />
+      </Routes>,
+      {
+        route: '/tickets/1',
+      }
+    );
 
     expect(await screen.findByText(/Test Ticket/i)).toBeInTheDocument();
 
     // Should show assignee ID with "(not an agent)" indicator
-    expect(screen.getByText(/invalid-user-id \(not an agent\)/i)).toBeInTheDocument();
+    expect(screen.getByTestId('assignee-name')).toHaveTextContent('invalid-user-id (not an agent)');
   });
 
   it('allows admin to assign ticket to agent', async () => {
@@ -104,31 +122,127 @@ describe('TicketDetailsPage', () => {
       assigneeId: undefined,
     };
 
-    (require('@/lib/auth-client').authClient.useSession as ReturnType<typeof vi.fn>).mockReturnValue({
+    // Setup mocks
+    authClient.useSession.mockReturnValue({
       data: { user: mockAdminUser },
       isPending: false,
     });
-    (require('@/api').fetchTicketById as ReturnType<typeof vi.fn>).mockResolvedValue(ticketUnassigned);
-    (require('@/api').fetchUsers as ReturnType<typeof vi.fn>).mockResolvedValue(mockAgents);
-    (require('@/api').updateTicket as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    const fetchTicketByIdMock = vi.mocked(fetchTicketById);
+    fetchTicketByIdMock.mockResolvedValue(ticketUnassigned);
+    const fetchUsersMock = vi.mocked(fetchUsers);
+    fetchUsersMock.mockResolvedValue(mockAgents);
+    const updateTicketMock = vi.mocked(updateTicket);
+    updateTicketMock.mockResolvedValue({});
 
-    renderWithQuery(<TicketDetailsPage />, {
-      route: '/tickets/1',
-    });
+    renderWithQuery(
+      <Routes>
+        <Route path="/tickets/:id" element={<TicketDetailsPage />} />
+      </Routes>,
+      {
+        route: '/tickets/1',
+      }
+    );
 
     // Select agent from dropdown
-    const select = screen.getByLabelText(/assign to:/i);
+    const select = screen.getByTestId('assign-to-select');
     await userEvent.selectOptions(select, 'agent-2');
 
-    // Click assign button
-    const assignButton = screen.getByRole('button', { name: /assign ticket/i });
-    await userEvent.click(assignButton);
+// Click save changes button
+    const assigneeSection = screen.getByRole('heading', { level: 3, name: /assignee/i });
+    const saveButton = within(assigneeSection).getByRole('button', { name: /save changes/i });
+    await userEvent.click(saveButton);
 
     // Wait for success message
-    expect(await screen.findByText(/ticket assigned successfully/i)).toBeInTheDocument();
+    expect(await screen.findByText(/changes saved successfully/i)).toBeInTheDocument();
 
     // Verify updateTicket was called with correct payload
-    expect(require('@/api').updateTicket).toHaveBeenCalledWith('1', { assigneeId: 'agent-2' });
+    expect(updateTicketMock).toHaveBeenCalledWith('1', { assigneeId: 'agent-2' });
+  });
+
+  it('allows admin to change ticket status', async () => {
+    const ticket = {
+      ...mockTicket,
+      status: 'OPEN' as const,
+    };
+
+    // Setup mocks
+    authClient.useSession.mockReturnValue({
+      data: { user: mockAdminUser },
+      isPending: false,
+    });
+    const fetchTicketByIdMock = vi.mocked(fetchTicketById);
+    fetchTicketByIdMock.mockResolvedValue(ticket);
+    const fetchUsersMock = vi.mocked(fetchUsers);
+    fetchUsersMock.mockResolvedValue(mockAgents);
+    const updateTicketMock = vi.mocked(updateTicket);
+    updateTicketMock.mockResolvedValue({});
+
+    renderWithQuery(
+      <Routes>
+        <Route path="/tickets/:id" element={<TicketDetailsPage />} />
+      </Routes>,
+      {
+        route: '/tickets/1',
+      }
+    );
+
+    // Select status from dropdown
+    const statusSelect = screen.getByTestId('status-select');
+    await userEvent.selectOptions(statusSelect, 'IN_PROGRESS');
+
+    // Click save changes button
+    const statusSection = screen.getByRole('heading', { level: 3, name: /status/i });
+    const saveButton = within(statusSection).getByRole('button', { name: /save changes/i });
+    await userEvent.click(saveButton);
+
+    // Wait for success message
+    expect(await screen.findByText(/changes saved successfully/i)).toBeInTheDocument();
+
+    // Verify updateTicket was called with correct payload
+    expect(updateTicketMock).toHaveBeenCalledWith('1', { status: 'IN_PROGRESS' });
+  });
+
+  it('allows admin to change ticket category', async () => {
+    const ticket = {
+      ...mockTicket,
+      category: 'GENERAL_QUESTION' as const,
+    };
+
+    // Setup mocks
+    authClient.useSession.mockReturnValue({
+      data: { user: mockAdminUser },
+      isPending: false,
+    });
+    const fetchTicketByIdMock = vi.mocked(fetchTicketById);
+    fetchTicketByIdMock.mockResolvedValue(ticket);
+    const fetchUsersMock = vi.mocked(fetchUsers);
+    fetchUsersMock.mockResolvedValue(mockAgents);
+    const updateTicketMock = vi.mocked(updateTicket);
+    updateTicketMock.mockResolvedValue({});
+
+    renderWithQuery(
+      <Routes>
+        <Route path="/tickets/:id" element={<TicketDetailsPage />} />
+      </Routes>,
+      {
+        route: '/tickets/1',
+      }
+    );
+
+    // Select category from dropdown
+    const categorySelect = screen.getByTestId('category-select');
+    await userEvent.selectOptions(categorySelect, 'TECHNICAL_QUESTION');
+
+    // Click save changes button
+    const categorySection = screen.getByRole('heading', { level: 3, name: /category/i });
+    const saveButton = within(categorySection).getByRole('button', { name: /save changes/i });
+    await userEvent.click(saveButton);
+
+    // Wait for success message
+    expect(await screen.findByText(/changes saved successfully/i)).toBeInTheDocument();
+
+    // Verify updateTicket was called with correct payload
+    expect(updateTicketMock).toHaveBeenCalledWith('1', { category: 'TECHNICAL_QUESTION' });
   });
 
   it('shows error when assignment fails', async () => {
@@ -137,63 +251,89 @@ describe('TicketDetailsPage', () => {
       assigneeId: undefined,
     };
 
-    (require('@/lib/auth-client').authClient.useSession as ReturnType<typeof vi.fn>).mockReturnValue({
+    // Setup mocks
+    authClient.useSession.mockReturnValue({
       data: { user: mockAdminUser },
       isPending: false,
     });
-    (require('@/api').fetchTicketById as ReturnType<typeof vi.fn>).mockResolvedValue(ticketUnassigned);
-    (require('@/api').fetchUsers as ReturnType<typeof vi.fn>).mockResolvedValue(mockAgents);
-    (require('@/api').updateTicket as ReturnType<typeof vi.fn>).mockRejectedValue(
-      new Error('Assignment failed')
+    const fetchTicketByIdMock = vi.mocked(fetchTicketById);
+    fetchTicketByIdMock.mockResolvedValue(ticketUnassigned);
+    const fetchUsersMock = vi.mocked(fetchUsers);
+    fetchUsersMock.mockResolvedValue(mockAgents);
+    const updateTicketMock = vi.mocked(updateTicket);
+    updateTicketMock.mockRejectedValue(new Error('Assignment failed'));
+
+    renderWithQuery(
+      <Routes>
+        <Route path="/tickets/:id" element={<TicketDetailsPage />} />
+      </Routes>,
+      {
+        route: '/tickets/1',
+      }
     );
 
-    renderWithQuery(<TicketDetailsPage />, {
-      route: '/tickets/1',
-    });
+    await userEvent.selectOptions(screen.getByTestId('assign-to-select'), 'agent-1');
+    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
 
-    await userEvent.selectOptions(screen.getByLabelText(/assign to:/i), 'agent-1');
-    await userEvent.click(screen.getByRole('button', { name: /assign ticket/i }));
-
-    expect(await screen.findByText(/failed to assign ticket/i)).toBeInTheDocument();
+    expect(await screen.findByText(/failed to update ticket/i)).toBeInTheDocument();
   });
 
   it('hides assignment controls for non-admin users', async () => {
-    (require('@/lib/auth-client').authClient.useSession as ReturnType<typeof vi.fn>).mockReturnValue({
+    // Setup mocks
+    authClient.useSession.mockReturnValue({
       data: { user: mockRegularUser },
       isPending: false,
     });
-    (require('@/api').fetchTicketById as ReturnType<typeof vi.fn>).mockResolvedValue(mockTicket);
-    (require('@/api').fetchUsers as ReturnType<typeof vi.fn>).mockResolvedValue(mockAgents);
+    const fetchTicketByIdMock = vi.mocked(fetchTicketById);
+    fetchTicketByIdMock.mockResolvedValue(mockTicket);
+    const fetchUsersMock = vi.mocked(fetchUsers);
+    fetchUsersMock.mockResolvedValue(mockAgents);
 
-    renderWithQuery(<TicketDetailsPage />, {
-      route: '/tickets/1',
-    });
+    renderWithQuery(
+      <Routes>
+        <Route path="/tickets/:id" element={<TicketDetailsPage />} />
+      </Routes>,
+      {
+        route: '/tickets/1',
+      }
+    );
 
     expect(await screen.findByText(/Test Ticket/i)).toBeInTheDocument();
 
     // Assignment controls should not be present
     expect(screen.queryByLabelText(/assign to:/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /assign ticket/i })).not.toBeInTheDocument();
+    // Status and category controls should also be hidden for non-admin
+    expect(screen.queryByLabelText(/status:/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/category:/i)).not.toBeInTheDocument();
 
     // But assignee info should still be visible
-    expect(screen.getByText(/Agent One/i)).toBeInTheDocument();
+    expect(screen.getByTestId('assignee-name')).toHaveTextContent('Agent One');
   });
 
   it('shows loading states appropriately', async () => {
-    (require('@/lib/auth-client').authClient.useSession as ReturnType<typeof vi.fn>).mockReturnValue({
+    // Setup mocks
+    authClient.useSession.mockReturnValue({
       data: { user: mockAdminUser },
       isPending: false,
     });
     // Simulate loading ticket
-    (require('@/api').fetchTicketById as ReturnType<typeof vi.fn>).mockImplementation(() => new Promise(() => {})); // pending promise
-    (require('@/api').fetchUsers as ReturnType<typeof vi.fn>).mockResolvedValue(mockAgents);
+    const fetchTicketByIdMock = vi.mocked(fetchTicketById);
+    fetchTicketByIdMock.mockImplementation(() => new Promise(() => {})); // pending promise
+    const fetchUsersMock = vi.mocked(fetchUsers);
+    fetchUsersMock.mockResolvedValue(mockAgents);
 
-    renderWithQuery(<TicketDetailsPage />, {
-      route: '/tickets/1',
-    });
+    renderWithQuery(
+      <Routes>
+        <Route path="/tickets/:id" element={<TicketDetailsPage />} />
+      </Routes>,
+      {
+        route: '/tickets/1',
+      }
+    );
 
     // Should show loading indicator
-    expect(screen.getByText(/loading/i)).toBeInTheDocument();
+    expect(screen.getByTestId('loading-indicator')).toBeInTheDocument();
 
     // Resolve the ticket fetch
     vi.waitFor(() => {}, { timeout: 100 }); // Just to flush mocks

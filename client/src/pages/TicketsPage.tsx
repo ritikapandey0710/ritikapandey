@@ -348,7 +348,7 @@ export default function TicketsPage() {
       filterFn: filterOpt('equals'),
       cell: ({ getValue }) => {
         const status = getValue() as TicketStatus;
-        const labelInfo = STATUS_LABELS[status] || { label: status, color: 'bg-slate-100 text-slate-600' };
+        const labelInfo = STATUS_LABELS[status];
         return (
           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${labelInfo.color}`}>
             {labelInfo.label}
@@ -364,7 +364,7 @@ export default function TicketsPage() {
       cell: ({ getValue }) => {
         const category = getValue() as TicketCategory | null;
         if (!category) return <span className="text-xs text-slate-500 italic">—</span>;
-        const label = CATEGORY_LABELS[category] || category.replace('_', ' ');
+        const label = CATEGORY_LABELS[category];
         return (
           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
             category === 'GENERAL_QUESTION' ? 'bg-violet-100 text-violet-700' :
@@ -383,7 +383,7 @@ export default function TicketsPage() {
       filterFn: filterOpt('equals'),
       cell: ({ getValue }) => {
         const priority = getValue() as TicketPriority;
-        const labelInfo = PRIORITY_LABELS[priority] || { label: priority, color: 'bg-slate-100 text-slate-600' };
+        const labelInfo = PRIORITY_LABELS[priority];
         return (
           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${labelInfo.color}`}>
             {labelInfo.label}
@@ -594,7 +594,7 @@ export default function TicketsPage() {
               >
                 <option value="">All Categories</option>
                 {availableCategories.map(c => (
-                  <option key={c} value={c}>{CATEGORY_LABELS[c as TicketCategory] || c}</option>
+                  <option key={c} value={c}>{CATEGORY_LABELS[c as TicketCategory]}</option>
                 ))}
                 <option value="__NONE__">Uncategorized</option>
               </select>
