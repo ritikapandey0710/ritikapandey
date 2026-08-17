@@ -145,7 +145,7 @@ router.patch(
 
 /**
  * DELETE /api/users/:id
- * Soft delete a user (admin only). Cannot delete oneself.
+ * Soft delete a user (admin only). Cannot delete oneself. Unassigns any tickets assigned to the user.
  */
 router.delete(
   "/:id",
@@ -170,11 +170,17 @@ router.delete(
       return res.status(400).json({ error: "User already deleted" });
     }
 
-    // Perform soft delete
-    await prisma.user.update({
-      where: { id },
-      data: { deletedAt: new Date() },
-    });
+    // Unassign tickets from this user and soft delete the user in a transaction
+    await prisma.$transaction([
+      prisma.ticket.updateMany({
+        where: { assigneeId: id },
+        data: { assigneeId: null },
+      }),
+      prisma.user.update({
+        where: { id },
+        data: { deletedAt: new Date() },
+      }),
+    ]);
 
     res.status(200).json({ message: "User deleted successfully" });
   })
