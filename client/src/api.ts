@@ -141,6 +141,20 @@ export async function createReply(ticketId: string, replyData: { body: string })
   }
 }
 
+export async function polishReply(text: string, agentName?: string, customerName?: string, subject?: string) {
+  const url = `/ai/polish`;
+
+  try {
+    const response = await api.post(url, { subject, text, agentName, customerName }, {
+      headers: { "Content-Type": "application/json" },
+    });
+    return response.data;
+  } catch (error: any) {
+    console.error("Error polishing reply:", error);
+    throw new Error(`Failed to polish reply: ${error.response?.data?.error || error.response?.status || 'Unknown error'}`);
+  }
+}
+
 // User management functions
 export async function fetchUsers() {
   const response = await api.get('/users', {

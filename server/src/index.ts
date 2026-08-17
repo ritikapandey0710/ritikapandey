@@ -7,6 +7,7 @@ import { toNodeHandler } from "better-auth/node";
 import { auth } from "./auth";
 import ticketRouter from "./ticket.router";
 import userRouter from "./modules/user/user.router";
+import aiRouter from "./ai.router";
 import { EmailService } from "./services/email.service";
 
 console.log("Server starting..."); // Debug line
@@ -52,8 +53,8 @@ app.use((req, _res, next) => {
 // Body parser MUST come BEFORE auth routes for JSON bodies to be parsed
 app.use(express.json());
 
-// Proper better-auth integration - mount at /api/auth as indicated by auth.basePath
-console.log(`Mounting auth middleware at ${auth.options?.basePath || '/api/auth'}`);
+// Proper better-auth integration - mount at /api/auth
+console.log('Mounting auth middleware at /api/auth');
 app.use("/api/auth", toNodeHandler(auth));
 
 app.get("/", (_req: Request, res: Response) => {
@@ -85,6 +86,9 @@ app.use("/api/tickets", ticketRouter);
 
 // User routes (admin only)
 app.use("/api/users", userRouter);
+
+// AI routes (polish reply)
+app.use("/api/ai", aiRouter);
 
 // 404 handler
 app.use((_req: Request, res: Response) => {

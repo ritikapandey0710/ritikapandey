@@ -373,6 +373,9 @@ export default function TicketDetailsPage() {
               isSubmitting={isSubmittingReply}
               submitError={replyError}
               submitSuccess={replySuccess}
+              agentName={user?.name}
+              customerName={ticket.senderName}
+              subject={ticket.title}
             />
           </div>
         </div>

@@ -24,6 +24,13 @@ export enum TicketPriority {
 
 export const TICKET_PRIORITIES: TicketPriority[] = [TicketPriority.LOW, TicketPriority.MEDIUM, TicketPriority.HIGH, TicketPriority.URGENT];
 
+export interface TicketUserBrief {
+  id: string;
+  name: string | null;
+  email: string;
+  role: string;
+}
+
 export interface Ticket {
   id: string;
   ticketNumber?: string | null;
@@ -35,6 +42,9 @@ export interface Ticket {
   priority: TicketPriority;
   category: TicketCategory | null;
   assigneeId: string | null;
+  reporterId?: string | null;
+  user_Ticket_reporterIdTouser?: TicketUserBrief | null;
+  user_Ticket_assigneeIdTouser?: TicketUserBrief | null;
   createdAt: string;
   updatedAt: string | null;
 }

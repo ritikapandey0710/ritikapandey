@@ -8,7 +8,6 @@ import { z } from 'zod';
 import { TicketStatus, TicketCategory, TicketPriority, TICKET_STATUSES, TICKET_CATEGORIES, TICKET_PRIORITIES } from '../types/ticket';
 import { ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { ChevronLeft } from 'lucide-react';
 import {
   useReactTable,
   getCoreRowModel,
@@ -196,6 +195,7 @@ const filterFns: Record<string, FilterFn<any>> = {
     if (filterValue === '' || filterValue == null) return true;
     const cellVal = row.getValue(id);
     if (filterValue === '__UNASSIGNED__') return cellVal == null || cellVal === '';
+    // Column accessorFn returns the assignee's display name (from the related User)
     return cellVal === filterValue;
   },
   createdDate: (row, id, filterValue) => {
@@ -215,8 +215,12 @@ const filterFns: Record<string, FilterFn<any>> = {
     const original = row.original as any;
     const ticketNum = original?.ticketNumber != null ? String(original.ticketNumber) : '';
     const title = String(original?.title || '');
-    const sender = String(original?.senderName || '');
-    const assignee = String(original?.assigneeId || '');
+    const sender = String(
+      original?.user_Ticket_reporterIdTouser?.name ?? original?.senderName ?? ''
+    );
+    const assignee = String(
+      original?.user_Ticket_assigneeIdTouser?.name ?? original?.assigneeId ?? ''
+    );
     const id = String(original?.id || '');
     return (
       `TKT-${ticketNum.padStart(5, '0')}`.toLowerCase().includes(q) ||
@@ -283,7 +287,10 @@ export default function TicketsPage() {
   const availableAssignees = useMemo(() => {
     if (!tickets) return [];
     const set = new Set<string>();
-    tickets.forEach((t: any) => { if (t.assigneeId) set.add(t.assigneeId); });
+    tickets.forEach((t: any) => {
+      const name = t.user_Ticket_assigneeIdTouser?.name;
+      if (name) set.add(name);
+    });
     return Array.from(set);
   }, [tickets]);
 
@@ -342,6 +349,8 @@ export default function TicketsPage() {
       accessorKey: 'senderName',
       header: 'Sender',
       enableSorting: true,
+      accessorFn: (row) =>
+        (row as any).user_Ticket_reporterIdTouser?.name ?? (row as any).senderName,
       cell: ({ getValue }) => {
         const val = getValue() as string;
         return (
@@ -405,6 +414,8 @@ export default function TicketsPage() {
       header: 'Assigned To',
       enableSorting: true,
       filterFn: filterOpt('assigneeMatch'),
+      accessorFn: (row) =>
+        (row as any).user_Ticket_assigneeIdTouser?.name ?? (row as any).assigneeId,
       cell: ({ getValue }) => {
         const assignedTo = getValue() as string | null;
         if (!assignedTo) return <span className="text-xs text-slate-500 italic">—</span>;

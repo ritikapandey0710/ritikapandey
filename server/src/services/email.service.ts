@@ -1,6 +1,5 @@
 import { simpleParser } from 'mailparser';
 import IMAP = require('imap-simple');
-import { Box } from 'imap';
 import { prisma } from '../prisma';
 import nodemailer from 'nodemailer';
 
@@ -93,16 +92,30 @@ export class EmailService {
   }
 
   /**
+   * Normalize mailparser's `from` field into a consistent address list.
+   */
+  private normalizeFrom(from: any): { address: string; name?: string }[] {
+    if (!from) return [];
+    const addresses = Array.isArray(from) ? from : [from];
+    return addresses
+      .map((addr) => addr?.value?.[0])
+      .filter(
+        (addr): addr is { address: string; name?: string } =>
+          !!addr && typeof addr.address === 'string' && addr.address.length > 0
+      );
+  }
+
+  /**
    * Parse raw email into structured format
    */
   private async parseEmail(rawEmail: any): Promise<ParsedEmail> {
     const parsed = await simpleParser(rawEmail);
 
     return {
-      from: parsed.from ? [parsed.from] : [],
+      from: this.normalizeFrom(parsed.from),
       subject: parsed.subject || '(No Subject)',
       text: parsed.text || '',
-      html: parsed.html,
+      html: parsed.html || undefined,
       date: parsed.date || new Date(),
       messageId: parsed.messageId || '',
     };
@@ -160,6 +173,11 @@ export class EmailService {
   ) {
     const title = email.subject.substring(0, 200); // Limit title length
     const description = this.extractEmailBody(email);
+
+    // Derive sender info from the parsed email (sender is validated before tickets are created)
+    const sender = email.from[0];
+    const senderEmail = sender?.address ?? '';
+    const senderName = sender?.name ?? senderEmail;
 
     // Determine priority based on subject keywords (simple heuristic)
     let priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT' = 'MEDIUM';

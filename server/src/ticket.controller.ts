@@ -9,9 +9,6 @@ export async function getTickets(req: any, res: any) {
   const validCategories = ["GENERAL_QUESTION", "TECHNICAL_QUESTION", "REFUND_REQUEST"];
   const validPriorities = ["LOW", "MEDIUM", "HIGH", "URGENT"];
 
-  // For now, we'll show all tickets since we don't have user relationships in the Ticket model
-  // In a real app, you might want to filter by user ownership or implement a different auth system
-
   if (search && typeof search === "string") {
     const searchFilter = {
       OR: [
@@ -56,6 +53,14 @@ export async function getTickets(req: any, res: any) {
   const tickets = await prisma.ticket.findMany({
     where,
     orderBy,
+    include: {
+      user_Ticket_reporterIdTouser: {
+        select: { id: true, name: true, email: true, role: true },
+      },
+      user_Ticket_assigneeIdTouser: {
+        select: { id: true, name: true, email: true, role: true },
+      },
+    },
   });
 
   res.json(tickets);
@@ -64,12 +69,17 @@ export async function getTickets(req: any, res: any) {
 export async function getTicketById(req: any, res: any) {
   const ticket = await prisma.ticket.findUnique({
     where: { id: req.params.id },
+    include: {
+      user_Ticket_reporterIdTouser: {
+        select: { id: true, name: true, email: true, role: true },
+      },
+      user_Ticket_assigneeIdTouser: {
+        select: { id: true, name: true, email: true, role: true },
+      },
+    },
   });
 
   if (!ticket) return res.status(404).json({ error: "Ticket not found" });
-
-  // For now, we'll allow access to any ticket since we don't have ownership tracking
-  // In a real app, you would check if the user owns this ticket or has permission
 
   res.json(ticket);
 }
@@ -87,8 +97,8 @@ export async function createTicket(req: any, res: any) {
   const validPriorities = ["LOW", "MEDIUM", "HIGH", "URGENT"];
   if (priority && !validPriorities.includes(priority)) return res.status(400).json({ error: "Invalid priority value" });
 
-  const validCategories = ["GENERAL_QUESTION", "TECHNICAL_QUESTION", "REFUND_REQUEST"];
-  if (category && !validCategories.includes(category)) return res.status(400).json({ error: "Invalid category value" });
+  const validCategorie = ["GENERAL_QUESTION", "TECHNICAL_QUESTION", "REFUND_REQUEST"];
+  if (category && !validCategorie.includes(category)) return res.status(400).json({ error: "Invalid category value" });
 
   // Get the current user from the request (set by auth middleware)
   const userId = (req as any).user?.id;
@@ -117,9 +127,6 @@ export async function updateTicket(req: any, res: any) {
   const existing = await prisma.ticket.findUnique({ where: { id } });
   if (!existing) return res.status(404).json({ error: "Ticket not found" });
 
-  // For now, we'll allow updates to any ticket since we don't have ownership tracking
-  // In a real app, you would check if the user owns this ticket or has permission
-
   const data: any = {};
   if (title !== undefined) data.title = title;
   if (description !== undefined) data.description = description;
@@ -134,8 +141,8 @@ export async function updateTicket(req: any, res: any) {
     data.priority = priority;
   }
   if (category !== undefined) {
-    const validCategories = [null, 'GENERAL_QUESTION', 'TECHNICAL_QUESTION', 'REFUND_REQUEST'];
-    if (!validCategories.includes(category)) {
+    const validCategoriesForUpdate = [null, 'GENERAL_QUESTION', 'TECHNICAL_QUESTION', 'REFUND_REQUEST'];
+    if (!validCategoriesForUpdate.includes(category)) {
       return res.status(400).json({ error: "Invalid category value" });
     }
     data.category = category;
@@ -157,9 +164,6 @@ export async function deleteTicket(req: any, res: any) {
 
   const existing = await prisma.ticket.findUnique({ where: { id } });
   if (!existing) return res.status(404).json({ error: "Ticket not found" });
-
-  // For now, we'll allow deletion of any ticket since we don't have ownership tracking
-  // In a real app, you would check if the user owns this ticket or has permission
 
   await prisma.ticket.delete({ where: { id } });
 
