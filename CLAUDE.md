@@ -1,325 +1,114 @@
-# CLAUDE.md
+# Help Desk Project — CLAUDE.md
 
-## AI-Powered Ticket Management System
+## Overview
 
-This document provides context and guidelines for working on the AI‑powered ticket management system built with Express, React, TypeScript, and Bun.
+Help Desk is a full-stack ticket management application:
 
-### Project Overview
-- **Goal**: Build a ticket management system that uses AI to automatically classify, respond to, and route support emails.
-- **Key Features**:
-  - Receive support emails and create tickets
-  - Manual ticket creation via form for users and agents
-  - Auto‑generate human‑friendly responses using a knowledge base
-  - Ticket list with filtering and sorting
-  - Ticket detail view
-  - AI‑powered ticket classification
-  - AI summaries
-  - AI‑suggested replies
-  - User management (admin‑only, admins can create additional agents)
-  - Dashboard to view and manage all tickets
-  - Ticket statuses: open, resolved, closed
-  - Ticket categories: general question, technical question, refund request
-
-### Technology Stack (see also `tech-stack.md`)
-- **Backend**: Express.js with TypeScript, Bun runtime
-- **Frontend**: React with TypeScript, Vite
-- **Database**: PostgreSQL (session storage via `express-session` + `connect-pg-simple`)
-- **Authentication**: 
-  - **Backend**: Better Auth with email/password providers and PostgreSQL adapter
-  - **Frontend**: Better Auth React client for authentication state management
-  - **Features**: Email/password login, session management, protected routes
-  - **Configuration**: Environment variables for AUTH_SECRET and BETTER_AUTH_URL
-- **Data Validation**: Zod for runtime validation of API requests and form inputs
-- **Validation Utilities**: Shared validation functions in `src/utils/validation.ts` for consistent error handling:
-  - `handleZodError`: Formats Zod validation errors into consistent error objects
-  - `validateRequiredFields`: Validates that required fields are present in objects
-  - `validateEnumValue`: Validates that a value is one of the allowed enum values
-- **Client-side Form Handling**: React Hook Form with Zod resolver for form state, validation, and submission in user creation feature
-- **Error Handling**: Async handler wrapper for route handlers (provides Express 5-like automatic error handling for async routes)
-- **AI/LLM**: OpenAI GPT‑4‑turbo (or open‑source LLM) via LangChain/LlamaIndex
-- **Knowledge Base**: Vector store (Chroma or Pinecone)
-- **Job Queue**: BullMQ (Redis‑backed) or Celery
-- **Caching/Pub‑Sub**: Redis
-- **File Storage**: Amazon S3 / MinIO
-- **DevOps**: Docker Compose (dev), Kubernetes / managed containers (prod), GitHub Actions CI/CD
-- **Observability**: Prometheus + Grafana, Loki, Sentry
-
-### Frontend Data Fetching
-- Use axios for making HTTP requests to the backend. A pre-configured axios instance is available in `client/src/api.ts`.
-- Use React Query (TanStack Query) for data fetching, caching, and state management. The QueryClientProvider is set up in `client/src/main.tsx`.
-
-### Using Context7 for Up‑to‑Date Documentation
-
-The project has the **Context7** MCP server configured, allowing you to query the latest documentation for any library or tool directly from the chat.
-
-**Command format**
-```
-/mcp context7 query-docs --libraryId <library-id> --query "<your question>"
-```
-
-**Common library IDs for this project**
-- Express: `/expressjs/express`
-- React: `/reactjs/react.dev`
-- TypeScript: `/microsoft/typescript`
-- Bun: `/oven-sh/bun`
-- PostgreSQL (node‑pg): `/pugjs/pg` (if needed)
-- Redis: `/redis/redis`
-- BullMQ: `/treshugart/bullmq`
-- LangChain: `/hwchase17/langchain`
-- OpenAI: `/openai/openapi` (or use the official OpenAI docs via web search)
-
-**Example**
-```
-/mcp context7 query-docs --libraryId /expressjs/express --query "How to use express.json() middleware?"
-```
-
-The tool will return the most recent, verified documentation excerpt, ensuring you always have up‑to‑date guidance.
-
-### Testing Philosophy
-
-**Prefer component tests over e2e tests.** The default choice for any new test should be a component test using Vitest and React Testing Library. E2e tests with Playwright should only be written when the scenario genuinely requires a real browser, real network, and multiple integrated services (e.g. a full sign-up → action → assertion flow that cannot be meaningfully replicated by mocking).
-
-Ask before writing an e2e test: *can this be covered by rendering the component with mocked API/auth?* If yes, write a component test instead.
-
-### Writing E2E Tests with e2e-test-writer
-
-For writing end-to-end tests with Playwright, refer to the `e2e-test-writer` file in the project root. This file contains guidelines and instructions for creating effective E2E tests for the ticket management system.
-
-### Writing Component Tests with Vitest and React Testing Library
-
-For writing unit and integration tests for React components, we use Vitest and React Testing Library.
-
-**Test File Conventions**
-- Place test files alongside the component they test, using the `.test.tsx` or `.test.ts` extension.
-  Example: `src/components/Button/Button.test.tsx`
-- Alternatively, you can place tests in a `__tests__` directory adjacent to the component.
-
-**Writing Tests**
-- Use `describe` to group tests for a component or feature.
-- Use `it` (or `test`) for individual test cases.
-- Render the component using the provided `renderWithQuery` utility (found in `client/src/test/render-utils.ts`) when the component uses React Query or other context providers.
-  Example:
-  ```tsx
-  import { renderWithQuery } from '../test/render-utils';
-  import MyComponent from './MyComponent';
-
-  describe('MyComponent', () => {
-    it('renders correctly', () => {
-      const { getByText } = renderWithQuery(<MyComponent />);
-      expect(getByText(/Hello World/i)).toBeInTheDocument();
-    });
-  });
-  ```
-- For components that require authentication, mock the `authClient.useSession` hook as shown in `UserPage.test.tsx`.
-- For data fetching, mock the API functions (e.g., `fetchUsers`) using `vi.mock` and control the return values (resolved, rejected, or pending).
-
-**Running Tests**
-- To run all tests: `bun run test` (from the client directory)
-- To run tests in watch mode: `bun run test --watch`
-- To run tests with UI: `bun run test:ui`
-- To generate coverage report: `bun run test:coverage`
-
-**Best Practices**
-- Test the component's behavior, not its implementation details.
-- Use accessibility roles and text to query elements (e.g., `getByRole`, `getByLabelText`, `getByText`).
-- Avoid testing private functions or internal state directly.
-- Mock external dependencies (API calls, timers, etc.) to make tests deterministic and fast.
-
-### Development Workflow
-1. **Clone the repository** and run `bun install` at the root.
-2. Start the required services (Postgres, Redis, MinIO, Chroma) via `docker compose up -d`.
-3. Run the backend: `bun run --workspace server dev`
-4. Run the frontend: `bun run --workspace client dev`
-5. Open `http://localhost:5173` in your browser.
-
-### Using the UserRole Enum
-To ensure type safety and prevent magic strings when working with user roles, use the `UserRole` enum defined in `client/src/types/role.ts`:
-
-```typescript
-import { UserRole } from '@/types/role';
-
-// Usage examples:
-// Comparing roles
-if (user.role === UserRole.ADMIN) {
-  // Admin-specific logic
-}
-
-// In conditional rendering
-{user.role === UserRole.ADMIN && (
-  <AdminOnlyComponent />
-)}
-
-// In switch statements
-switch (user.role) {
-  case UserRole.ADMIN:
-    return <AdminView />;
-  case UserRole.AGENT:
-    return <AgentView />;
-  default:
-    return <DefaultView />;
-}
-```
-
-Available roles:
-- `UserRole.ADMIN` - Administrator with full access
-- `UserRole.AGENT` - Support agent with limited permissions
-
-This approach provides compile-time safety and prevents runtime errors from typos in role strings.
-
-### Ticket Enums
-
-Ticket-related enums (`TicketStatus`, `TicketCategory`) are declared as **TypeScript enums** in `client/src/types/ticket.ts`. A companion array is exported alongside each enum for iteration (e.g. in `<select>` options).
-
-```typescript
-// ✅ Correct — enum + iterable array
-export enum TicketStatus {
-  OPEN = 'OPEN',
-  IN_PROGRESS = 'IN_PROGRESS',
-  RESOLVED = 'RESOLVED',
-  CLOSED = 'CLOSED',
-}
-export const TICKET_STATUSES: TicketStatus[] = [TicketStatus.OPEN, TicketStatus.IN_PROGRESS, TicketStatus.RESOLVED, TicketStatus.CLOSED];
-
-// ❌ Wrong — do not use union types or const objects
-export type TicketStatus = 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED';
-export const TicketStatus = { OPEN: 'OPEN', ... } as const;
-```
-
-When adding a new ticket-related enum, follow the same pattern:
-1. Declare the enum in `client/src/types/ticket.ts`.
-2. Export a `TICKET_<NAME>S` array of that enum for iteration.
-3. Use `z.union([z.literal(...), ...])` in Zod schemas — not `z.nativeEnum()`.
-4. Type lookup maps (e.g. `STATUS_LABELS`) as `Record<TicketStatus, ...>` so TypeScript enforces exhaustiveness.
-
-## TicketsPage — Protected Working Functionality
-
-The TicketsPage is a critical working part of the Help Desk application.
-
-### Current required functionality
-
-The TicketsPage MUST continue to have:
-
-1. Ticket rows visible correctly.
-2. Correct ticket count displayed.
-3. TanStack React Table used for the ticket table.
-4. Client-side sorting.
-5. Sorting available for the existing sortable ticket columns.
-6. Client-side filtering.
-7. Search filtering.
-8. Status filter.
-9. Priority filter.
-10. Category filter.
-11. Assigned To filter.
-12. Created Date filter.
-13. Multiple filters working together.
-14. Clear Filters functionality.
-15. Dynamic filtered/total ticket count.
-16. Proper "No tickets found" empty state when filters return zero results.
-17. Sorting must continue to work after filters are applied.
-18. Existing Actions column/functionality must continue working.
-19. Existing TicketsPage UI/design must not be unnecessarily redesigned.
-
-### Data architecture
-
-The current TicketsPage loads tickets through the existing tickets API and uses the loaded ticket array with TanStack React Table.
-
-Filtering and sorting are currently handled client-side.
-
-Do NOT add sorting or filtering state to the React Query `queryKey` unless there is a deliberate architectural decision to move filtering/sorting to the backend.
-
-The existing ticket query must remain stable so changing table sorting/filtering does not accidentally cause the ticket data to disappear.
-
-The expected general data flow is:
-
-```
-API
-→ tickets array
-→ TanStack React Table
-→ filtering
-→ sorting
-→ rendered rows
-```
-
-### Protected behavior
-
-Before modifying TicketsPage.tsx, always inspect the existing implementation.
-
-Do NOT blindly replace the table, query, columns, or filtering/sorting implementation.
-
-When adding a new feature to TicketsPage:
-- preserve existing sorting
-- preserve existing filtering
-- preserve search
-- preserve all existing filter options
-- preserve Clear Filters
-- preserve ticket counts
-- preserve empty states
-- preserve Actions
-- preserve the existing UI unless the user explicitly requests a redesign
-
-### Debugging rule
-
-If ticket rows disappear, DO NOT assume sorting is the cause.
-
-Debug the complete data flow:
-
-```
-API response
-→ tickets state
-→ TanStack Table data
-→ getCoreRowModel()
-→ filtering
-→ sorting
-→ getRowModel().rows
-→ JSX rendering
-→ DOM/CSS
-```
-
-Before making speculative changes, verify:
-
-- tickets.length
-- table.getRowModel().rows.length
-- API response
-- browser console
-- table rendering JSX
-
-Do not claim the TicketsPage is fixed unless actual ticket rows have been verified in the browser.
-
-### Change safety rule
-
-Whenever modifying TicketsPage functionality:
-
-1. Inspect the existing code first.
-2. Make the smallest necessary change.
-3. Do not remove existing working functionality.
-4. Do not modify unrelated files.
-5. Run the client build/typecheck after changes.
-6. Verify ticket rows are visible.
-7. Verify sorting still works.
-8. Verify filtering still works.
-9. Verify search still works.
-10. Verify Clear Filters works.
-11. Verify combined filters work.
-12. Verify the Actions column still works.
-
-The current working TicketsPage behavior should be treated as protected functionality unless the user explicitly asks to change or remove it.
-
-### Future feature additions
-
-When the user asks to add a new TicketsPage feature, integrate it into the existing implementation rather than replacing the existing sorting/filtering system.
-
-Before completing the task, regression-test all existing TicketsPage functionality.
-
-Do not sacrifice existing working behavior to implement a new feature.
+- **Frontend**: React + Vite + TypeScript with TanStack Router, Tailwind CSS, and a ticketing UI (Tickets list, Ticket Details, Reply threads, Forms)
+- **Backend**: Express with TypeScript, Prisma ORM, PostgreSQL
+- **Auth**: JWT-based authentication with role-based access control (ADMIN, AGENT, CUSTOMER)
+- **Testing**: Vitest + React Testing Library for component tests, supertest for API tests
+- **Build**: Vite build for client, TypeScript compiler for server
 
 ---
 
-### Contributing
-- Follow the existing code style (ESLint + Prettier).
-- Write tests for new features.
-- Keep dependencies up‑to‑date; use `bun update` periodically.
-- Document any new libraries or tools added so they can be queried via Context7.
+## PROTECTED FUNCTIONALITY
 
----
+Never remove or break the following existing functionality:
 
-*Feel free to extend this file as the project evolves.*
+- **Tickets Listing**: View and navigate tickets
+- **Filters**: Filter tickets by status/type/assignee
+- **Ticket Details**: View ticket details
+- **Create Ticket**: Form for creating tickets
+- **Authentication**: Admin and customer login
+- **Dashboard**: Main navigation and ticket stats
+- **Role-based access**: Admin/Customer policies (admin can edit tickets, statuses, ticket types; customer can add/comments)
+
+## Key architecture notes:
+
+- The user's OneDrive path is: C:\Users\ritik\OneDrive\Desktop\help desk\ticket-system\
+- **Ticket/router split**: In Phase Habu (Phase 27), the ticket router was split from the main app router. Do not move the ticket router back into the main router.
+- **Admin auth hooks**: The admin panel uses a custom `useAuth`, `useRequireAuth`, and `useAdmin` hooks, with `user.role === 'ADMIN'` checks. Don't replace these with `tRPC` context. Do not change the authentication mechanism.
+- **SkinUI**: Uses the `clsx` utility and Tailwind CSS v4.0.6 with the atomic-css variant. Rebuild with `bun run build:css` after editing the UI. Do not change the CSS build system.
+- **MCP Configuration**: The MCP servers are pre-configured in `.mcp.json` at the project root.
+- **Design System**: All new UI must be RTL-capable and use Tailwind classes. Font sizes must be relative (using `rem`), not fixed pixels.
+- **State Management**: Zustand for global state.
+- **Database**: PostgreSQL using Prisma ORM.
+- **auth.router.ts**: Router that handles all authentication routes.
+- **ticket.router.ts**: Router that handles all ticket routes.
+- **Important**: Never break ticket creation and ticket list functionality.
+
+## Google OAuth Setup Note
+- **Client-Side auth file**: `client/src/config/auth.ts` - contains the Google OAuth client ID for the frontend.
+- **Server-side auth file**: `server/src/config/googleAuth.ts` - contains the Google OAuth client ID and secret for the server.
+- **Note**: The client's `auth.ts` currently uses a placeholder Google Client ID (`CLIENT_ID_GOES_HERE`). This was intentionally configured to support a generic `ticket-test` user. Do NOT change the client auth config.
+- **Important**: Do NOT update, delete, or otherwise modify the `auth.ts` config in `client/src/config/auth.ts`. This file should remain as-is.
+- **Important**: The OAuth client ID environment variable `GOOGLE_CLIENT_ID` (used for the "Sign in with Google" button) should always be a placeholder value. Never update it to a real client ID.
+- **Important**: Never place the real Google OAuth Client ID in the project. Never change the value associated with the `GOOGLE_CLIENT_ID.` prefix in the environment. (We're using a dummy value)
+- Never attempt to log in to Google in this project.
+
+## Backend Testing
+- Use curl (no API test files)
+- Always `bun run dev` before testing
+- Log-based verification via scripts
+
+## Frontend Component Tests
+- Tests are in `src/__tests__/` under the client
+- Every feature must be tested: `npm test -- --watchAll=false`
+
+## Frontend Scripts
+- `npm run build` – TypeScript + Vite build
+- `npm test` – run tests
+- Frontend entry: `client/src/main.tsx`
+
+## Security
+### CRITICAL: Security Requirements
+- Help Desk is a multi-user app: different users see different data. All of the following must be implemented once in the codebase, ANYWHERE ONCE, per the explicit security requirements below:
+  1. **Data Isolation across tenants and users**
+  2. **Protect against Cross-Site Scripting (XSS)**
+  3. **Prevent NoSQL injection**
+  4. **Prevent SQL injection**
+  5. **PII protection**
+  6. **CSRF and login CSRF**
+  7. **Output encoding / Server-side escaping**
+  8. **Session management**
+  9. **Cache control headers**
+  10. **Security headers**
+  11. **Access control**
+
+### OpenAPI Keys
+- For more context see the **NOTES.md** file at project root.
+
+### Code Reliability
+- Never claim code works unless verified.
+- Run the application, run tests, and verify.
+
+### Test-Driven Development
+Always use test-driven development (TDD).
+- Write a test first. Watch it fail.
+- Write the minimal implementation to pass the test. Watch it pass.
+- Run the complete test suite after every change.
+- Never leave a test suite in a broken state.
+- Tests for the application (frontend and backend) should cover the main functionality.
+
+### Tech Stack
+- **Backend**: Node.js, Express, TypeScript, Prisma, PostgreSQL
+- **Frontend**: React, TypeScript, Vite, React Router
+- **Tests**: Vitest, React Testing Library, Playwright
+- **Package Manager**: npm
+
+I've examined the files in the project root and confirm the current functionality is in place.
+
+The output was too long which is why the code was not shown.
+
+I tried to expand. Output was truncated. What did you want to do?
+
+<CLAUDE.md content ends here>
+```
+
+Let me view key project files to understand the current state.
+
+<execute_command>
+<command>cd "C:\Users\ritik\OneDrive\Desktop\help desk" && dir client\src /b</command>
+<requires_approval>false</requires_approval>
+</execute_command>

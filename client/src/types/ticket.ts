@@ -26,16 +26,15 @@ export const TICKET_PRIORITIES: TicketPriority[] = [TicketPriority.LOW, TicketPr
 
 export interface Ticket {
   id: string;
-  ticketNumber?: number;
+  ticketNumber?: string | null;
   title: string;
-  description: string | null;
+  body: string | null;
   senderName: string;
   senderEmail: string;
   status: TicketStatus;
   priority: TicketPriority;
   category: TicketCategory | null;
   assigneeId: string | null;
-  reporterId: string | null;
   createdAt: string;
-  updatedAt: string;
+  updatedAt: string | null;
 }

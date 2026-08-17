@@ -1,27 +1,44 @@
-// Mock the API functions
-vi.mock('../api', () => ({
+import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { renderWithQuery } from '../test/render-utils';
+import { screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import TicketDetailsPage from './TicketDetailsPage';
+import { Routes, Route } from 'react-router-dom';
+
+// Create mock functions using vi.hoisted so they are available in vi.mock factories
+const mocks = vi.hoisted(() => ({
+  useSession: vi.fn(),
   fetchTicketById: vi.fn(),
   updateTicket: vi.fn(),
   fetchUsers: vi.fn(),
+  fetchRepliesByTicketId: vi.fn(),
+  createReply: vi.fn(),
 }));
+
+// Mock the API functions
+vi.mock('../api', () => {
+  console.log('[MOCK] api factory called, mocks.fetchTicketById =', typeof mocks.fetchTicketById);
+  return {
+    fetchTicketById: mocks.fetchTicketById,
+    updateTicket: mocks.updateTicket,
+    fetchUsers: mocks.fetchUsers,
+    fetchRepliesByTicketId: mocks.fetchRepliesByTicketId,
+    createReply: mocks.createReply,
+  };
+});
 
 // Mock authClient
-vi.mock('../lib/auth-client', () => ({
-  authClient: {
-    useSession: vi.fn(),
-    signIn: { email: vi.fn() },
-    signUp: { email: vi.fn() },
-    signOut: vi.fn(),
-  },
-}));
-
-import { renderWithQuery } from '../test/render-utils';
-import { screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import TicketDetailsPage from './TicketDetailsPage';
-import {authClient} from '../lib/auth-client';
-import {fetchTicketById, updateTicket, fetchUsers} from '../api';
-import {Routes, Route} from 'react-router-dom';
+vi.mock('../lib/auth-client', () => {
+  console.log('[MOCK] auth-client factory called, mocks.useSession =', typeof mocks.useSession);
+  return {
+    authClient: {
+      useSession: mocks.useSession,
+      signIn: { email: vi.fn() },
+      signUp: { email: vi.fn() },
+      signOut: vi.fn(),
+    },
+  };
+});
 
 describe('TicketDetailsPage', () => {
   const mockTicket = {
@@ -47,20 +64,42 @@ describe('TicketDetailsPage', () => {
   const mockAdminUser = { id: 'admin-1', name: 'Admin User', email: 'admin@example.com', role: 'ADMIN' };
   const mockRegularUser = { id: 'user-1', name: 'Regular User', email: 'user@example.com', role: 'AGENT' };
 
+  const mockReplies = [
+    {
+      id: 'reply-1',
+      body: 'This is a reply',
+      ticketId: '1',
+      authorId: 'agent-1',
+      senderType: 'AGENT',
+      createdAt: '2026-08-14T12:00:00Z',
+      author: { id: 'agent-1', name: 'Agent One', email: 'agent1@example.com' },
+    },
+  ];
+
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default mocks for reply functions
+    mocks.fetchRepliesByTicketId.mockResolvedValue([]);
+    mocks.createReply.mockResolvedValue({ id: 'new-reply', body: 'Test reply' });
+  });
+
+  it('debug: check if mocks are applied', () => {
+    console.log('[TEST] authClient module check');
+    // This test verifies mock setup
+    expect(mocks.useSession).toBeDefined();
+    expect(mocks.fetchTicketById).toBeDefined();
+    expect(typeof mocks.useSession.mockReturnValue).toBe('function');
+    expect(typeof mocks.fetchTicketById.mockResolvedValue).toBe('function');
   });
 
   it('displays ticket details with assigned agent', async () => {
     // Setup mocks
-    authClient.useSession.mockReturnValue({
+    mocks.useSession.mockReturnValue({
       data: { user: mockAdminUser },
       isPending: false,
     });
-    const fetchTicketByIdMock = vi.mocked(fetchTicketById);
-    fetchTicketByIdMock.mockResolvedValue(mockTicket);
-    const fetchUsersMock = vi.mocked(fetchUsers);
-    fetchUsersMock.mockResolvedValue(mockAgents);
+    mocks.fetchTicketById.mockResolvedValue(mockTicket);
+    mocks.fetchUsers.mockResolvedValue(mockAgents);
 
     // Render component with routing
     renderWithQuery(
@@ -81,8 +120,9 @@ describe('TicketDetailsPage', () => {
 
     // Check assignment controls are visible for admin
     expect(screen.getByLabelText(/assign to:/i)).toBeInTheDocument();
-    const assigneeSection = screen.getByRole('heading', { level: 3, name: /assignee/i });
-    expect(within(assigneeSection).getByRole('button', { name: /save changes/i })).toBeInTheDocument();
+    // Check save button is present within the assignee controls section
+    const assigneeControls = screen.getByTestId('assignee-controls');
+    expect(within(assigneeControls).getByRole('button', { name: /save changes/i })).toBeInTheDocument();
   });
 
   it('shows invalid assignee warning when assignee is not an agent', async () => {
@@ -92,14 +132,12 @@ describe('TicketDetailsPage', () => {
     };
 
     // Setup mocks
-    authClient.useSession.mockReturnValue({
+    mocks.useSession.mockReturnValue({
       data: { user: mockAdminUser },
       isPending: false,
     });
-    const fetchTicketByIdMock = vi.mocked(fetchTicketById);
-    fetchTicketByIdMock.mockResolvedValue(ticketWithInvalidAssignee);
-    const fetchUsersMock = vi.mocked(fetchUsers);
-    fetchUsersMock.mockResolvedValue(mockAgents);
+    mocks.fetchTicketById.mockResolvedValue(ticketWithInvalidAssignee);
+    mocks.fetchUsers.mockResolvedValue(mockAgents);
 
     renderWithQuery(
       <Routes>
@@ -123,16 +161,13 @@ describe('TicketDetailsPage', () => {
     };
 
     // Setup mocks
-    authClient.useSession.mockReturnValue({
+    mocks.useSession.mockReturnValue({
       data: { user: mockAdminUser },
       isPending: false,
     });
-    const fetchTicketByIdMock = vi.mocked(fetchTicketById);
-    fetchTicketByIdMock.mockResolvedValue(ticketUnassigned);
-    const fetchUsersMock = vi.mocked(fetchUsers);
-    fetchUsersMock.mockResolvedValue(mockAgents);
-    const updateTicketMock = vi.mocked(updateTicket);
-    updateTicketMock.mockResolvedValue({});
+    mocks.fetchTicketById.mockResolvedValue(ticketUnassigned);
+    mocks.fetchUsers.mockResolvedValue(mockAgents);
+    mocks.updateTicket.mockResolvedValue({});
 
     renderWithQuery(
       <Routes>
@@ -143,20 +178,23 @@ describe('TicketDetailsPage', () => {
       }
     );
 
+    // Wait for ticket to load
+    expect(await screen.findByText(/Test Ticket/i)).toBeInTheDocument();
+
     // Select agent from dropdown
     const select = screen.getByTestId('assign-to-select');
     await userEvent.selectOptions(select, 'agent-2');
 
-// Click save changes button
-    const assigneeSection = screen.getByRole('heading', { level: 3, name: /assignee/i });
-    const saveButton = within(assigneeSection).getByRole('button', { name: /save changes/i });
+    // Click save changes button
+    const assigneeControls = screen.getByTestId('assignee-controls');
+    const saveButton = within(assigneeControls).getByRole('button', { name: /save changes/i });
     await userEvent.click(saveButton);
 
     // Wait for success message
     expect(await screen.findByText(/changes saved successfully/i)).toBeInTheDocument();
 
     // Verify updateTicket was called with correct payload
-    expect(updateTicketMock).toHaveBeenCalledWith('1', { assigneeId: 'agent-2' });
+    expect(mocks.updateTicket).toHaveBeenCalledWith('1', { assigneeId: 'agent-2' });
   });
 
   it('allows admin to change ticket status', async () => {
@@ -166,16 +204,13 @@ describe('TicketDetailsPage', () => {
     };
 
     // Setup mocks
-    authClient.useSession.mockReturnValue({
+    mocks.useSession.mockReturnValue({
       data: { user: mockAdminUser },
       isPending: false,
     });
-    const fetchTicketByIdMock = vi.mocked(fetchTicketById);
-    fetchTicketByIdMock.mockResolvedValue(ticket);
-    const fetchUsersMock = vi.mocked(fetchUsers);
-    fetchUsersMock.mockResolvedValue(mockAgents);
-    const updateTicketMock = vi.mocked(updateTicket);
-    updateTicketMock.mockResolvedValue({});
+    mocks.fetchTicketById.mockResolvedValue(ticket);
+    mocks.fetchUsers.mockResolvedValue(mockAgents);
+    mocks.updateTicket.mockResolvedValue({});
 
     renderWithQuery(
       <Routes>
@@ -186,20 +221,23 @@ describe('TicketDetailsPage', () => {
       }
     );
 
+    // Wait for ticket to load
+    expect(await screen.findByText(/Test Ticket/i)).toBeInTheDocument();
+
     // Select status from dropdown
     const statusSelect = screen.getByTestId('status-select');
     await userEvent.selectOptions(statusSelect, 'IN_PROGRESS');
 
     // Click save changes button
-    const statusSection = screen.getByRole('heading', { level: 3, name: /status/i });
-    const saveButton = within(statusSection).getByRole('button', { name: /save changes/i });
+    const statusControls = screen.getByTestId('status-controls');
+    const saveButton = within(statusControls).getByRole('button', { name: /save changes/i });
     await userEvent.click(saveButton);
 
     // Wait for success message
     expect(await screen.findByText(/changes saved successfully/i)).toBeInTheDocument();
 
     // Verify updateTicket was called with correct payload
-    expect(updateTicketMock).toHaveBeenCalledWith('1', { status: 'IN_PROGRESS' });
+    expect(mocks.updateTicket).toHaveBeenCalledWith('1', { status: 'IN_PROGRESS' });
   });
 
   it('allows admin to change ticket category', async () => {
@@ -209,16 +247,13 @@ describe('TicketDetailsPage', () => {
     };
 
     // Setup mocks
-    authClient.useSession.mockReturnValue({
+    mocks.useSession.mockReturnValue({
       data: { user: mockAdminUser },
       isPending: false,
     });
-    const fetchTicketByIdMock = vi.mocked(fetchTicketById);
-    fetchTicketByIdMock.mockResolvedValue(ticket);
-    const fetchUsersMock = vi.mocked(fetchUsers);
-    fetchUsersMock.mockResolvedValue(mockAgents);
-    const updateTicketMock = vi.mocked(updateTicket);
-    updateTicketMock.mockResolvedValue({});
+    mocks.fetchTicketById.mockResolvedValue(ticket);
+    mocks.fetchUsers.mockResolvedValue(mockAgents);
+    mocks.updateTicket.mockResolvedValue({});
 
     renderWithQuery(
       <Routes>
@@ -229,20 +264,23 @@ describe('TicketDetailsPage', () => {
       }
     );
 
+    // Wait for ticket to load
+    expect(await screen.findByText(/Test Ticket/i)).toBeInTheDocument();
+
     // Select category from dropdown
     const categorySelect = screen.getByTestId('category-select');
     await userEvent.selectOptions(categorySelect, 'TECHNICAL_QUESTION');
 
     // Click save changes button
-    const categorySection = screen.getByRole('heading', { level: 3, name: /category/i });
-    const saveButton = within(categorySection).getByRole('button', { name: /save changes/i });
+    const categoryControls = screen.getByTestId('category-controls');
+    const saveButton = within(categoryControls).getByRole('button', { name: /save changes/i });
     await userEvent.click(saveButton);
 
     // Wait for success message
     expect(await screen.findByText(/changes saved successfully/i)).toBeInTheDocument();
 
     // Verify updateTicket was called with correct payload
-    expect(updateTicketMock).toHaveBeenCalledWith('1', { category: 'TECHNICAL_QUESTION' });
+    expect(mocks.updateTicket).toHaveBeenCalledWith('1', { category: 'TECHNICAL_QUESTION' });
   });
 
   it('shows error when assignment fails', async () => {
@@ -252,16 +290,13 @@ describe('TicketDetailsPage', () => {
     };
 
     // Setup mocks
-    authClient.useSession.mockReturnValue({
+    mocks.useSession.mockReturnValue({
       data: { user: mockAdminUser },
       isPending: false,
     });
-    const fetchTicketByIdMock = vi.mocked(fetchTicketById);
-    fetchTicketByIdMock.mockResolvedValue(ticketUnassigned);
-    const fetchUsersMock = vi.mocked(fetchUsers);
-    fetchUsersMock.mockResolvedValue(mockAgents);
-    const updateTicketMock = vi.mocked(updateTicket);
-    updateTicketMock.mockRejectedValue(new Error('Assignment failed'));
+    mocks.fetchTicketById.mockResolvedValue(ticketUnassigned);
+    mocks.fetchUsers.mockResolvedValue(mockAgents);
+    mocks.updateTicket.mockRejectedValue(new Error('Assignment failed'));
 
     renderWithQuery(
       <Routes>
@@ -272,22 +307,24 @@ describe('TicketDetailsPage', () => {
       }
     );
 
+    // Wait for ticket to load
+    expect(await screen.findByText(/Test Ticket/i)).toBeInTheDocument();
+
     await userEvent.selectOptions(screen.getByTestId('assign-to-select'), 'agent-1');
-    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    const assigneeControls = screen.getByTestId('assignee-controls');
+    await userEvent.click(within(assigneeControls).getByRole('button', { name: /save changes/i }));
 
     expect(await screen.findByText(/failed to update ticket/i)).toBeInTheDocument();
   });
 
   it('hides assignment controls for non-admin users', async () => {
     // Setup mocks
-    authClient.useSession.mockReturnValue({
+    mocks.useSession.mockReturnValue({
       data: { user: mockRegularUser },
       isPending: false,
     });
-    const fetchTicketByIdMock = vi.mocked(fetchTicketById);
-    fetchTicketByIdMock.mockResolvedValue(mockTicket);
-    const fetchUsersMock = vi.mocked(fetchUsers);
-    fetchUsersMock.mockResolvedValue(mockAgents);
+    mocks.fetchTicketById.mockResolvedValue(mockTicket);
+    mocks.fetchUsers.mockResolvedValue(mockAgents);
 
     renderWithQuery(
       <Routes>
@@ -313,15 +350,13 @@ describe('TicketDetailsPage', () => {
 
   it('shows loading states appropriately', async () => {
     // Setup mocks
-    authClient.useSession.mockReturnValue({
+    mocks.useSession.mockReturnValue({
       data: { user: mockAdminUser },
       isPending: false,
     });
     // Simulate loading ticket
-    const fetchTicketByIdMock = vi.mocked(fetchTicketById);
-    fetchTicketByIdMock.mockImplementation(() => new Promise(() => {})); // pending promise
-    const fetchUsersMock = vi.mocked(fetchUsers);
-    fetchUsersMock.mockResolvedValue(mockAgents);
+    mocks.fetchTicketById.mockImplementation(() => new Promise(() => {})); // pending promise
+    mocks.fetchUsers.mockResolvedValue(mockAgents);
 
     renderWithQuery(
       <Routes>
@@ -337,5 +372,210 @@ describe('TicketDetailsPage', () => {
 
     // Resolve the ticket fetch
     vi.waitFor(() => {}, { timeout: 100 }); // Just to flush mocks
+  });
+
+  // ===== REPLY COMPOSER TESTS =====
+
+  it('shows reply composer when ticket has zero replies', async () => {
+    mocks.useSession.mockReturnValue({
+      data: { user: mockAdminUser },
+      isPending: false,
+    });
+    mocks.fetchTicketById.mockResolvedValue(mockTicket);
+    mocks.fetchUsers.mockResolvedValue(mockAgents);
+    mocks.fetchRepliesByTicketId.mockResolvedValue([]);
+
+    renderWithQuery(
+      <Routes>
+        <Route path="/tickets/:id" element={<TicketDetailsPage />} />
+      </Routes>,
+      { route: '/tickets/1' }
+    );
+
+    expect(await screen.findByText(/Test Ticket/i)).toBeInTheDocument();
+    expect(await screen.findByText(/No replies yet/i)).toBeInTheDocument();
+
+    // Reply composer must be visible
+    expect(screen.getByTestId('reply-composer')).toBeInTheDocument();
+    expect(screen.getByLabelText(/write a reply/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /send reply/i })).toBeInTheDocument();
+  });
+
+  it('shows reply composer when ticket has existing replies', async () => {
+    mocks.useSession.mockReturnValue({
+      data: { user: mockAdminUser },
+      isPending: false,
+    });
+    mocks.fetchTicketById.mockResolvedValue(mockTicket);
+    mocks.fetchUsers.mockResolvedValue(mockAgents);
+    mocks.fetchRepliesByTicketId.mockResolvedValue(mockReplies);
+
+    renderWithQuery(
+      <Routes>
+        <Route path="/tickets/:id" element={<TicketDetailsPage />} />
+      </Routes>,
+      { route: '/tickets/1' }
+    );
+
+    expect(await screen.findByText(/Test Ticket/i)).toBeInTheDocument();
+    expect(await screen.findByText(/This is a reply/i)).toBeInTheDocument();
+
+    // Reply composer must be visible
+    expect(screen.getByTestId('reply-composer')).toBeInTheDocument();
+    expect(screen.getByLabelText(/write a reply/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /send reply/i })).toBeInTheDocument();
+  });
+
+  it('shows reply composer while replies are loading', async () => {
+    mocks.useSession.mockReturnValue({
+      data: { user: mockAdminUser },
+      isPending: false,
+    });
+    mocks.fetchTicketById.mockResolvedValue(mockTicket);
+    mocks.fetchUsers.mockResolvedValue(mockAgents);
+    // Simulate loading replies (pending promise)
+    mocks.fetchRepliesByTicketId.mockImplementation(() => new Promise(() => {}));
+
+    renderWithQuery(
+      <Routes>
+        <Route path="/tickets/:id" element={<TicketDetailsPage />} />
+      </Routes>,
+      { route: '/tickets/1' }
+    );
+
+    expect(await screen.findByText(/Test Ticket/i)).toBeInTheDocument();
+    expect(screen.getByText(/Loading replies/i)).toBeInTheDocument();
+
+    // Reply composer must be visible even while loading
+    expect(screen.getByTestId('reply-composer')).toBeInTheDocument();
+    expect(screen.getByLabelText(/write a reply/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /send reply/i })).toBeInTheDocument();
+  });
+
+  it('shows reply composer even when replies API fails', async () => {
+    mocks.useSession.mockReturnValue({
+      data: { user: mockAdminUser },
+      isPending: false,
+    });
+    mocks.fetchTicketById.mockResolvedValue(mockTicket);
+    mocks.fetchUsers.mockResolvedValue(mockAgents);
+    mocks.fetchRepliesByTicketId.mockRejectedValue(new Error('Failed to fetch replies'));
+
+    renderWithQuery(
+      <Routes>
+        <Route path="/tickets/:id" element={<TicketDetailsPage />} />
+      </Routes>,
+      { route: '/tickets/1' }
+    );
+
+    expect(await screen.findByText(/Test Ticket/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Failed to load replies/i)).toBeInTheDocument();
+
+    // Reply composer must be visible even when replies API fails
+    expect(screen.getByTestId('reply-composer')).toBeInTheDocument();
+    expect(screen.getByLabelText(/write a reply/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /send reply/i })).toBeInTheDocument();
+  });
+
+  it('allows sending a reply and keeps composer visible', async () => {
+    mocks.useSession.mockReturnValue({
+      data: { user: mockAdminUser },
+      isPending: false,
+    });
+    mocks.fetchTicketById.mockResolvedValue(mockTicket);
+    mocks.fetchUsers.mockResolvedValue(mockAgents);
+    mocks.fetchRepliesByTicketId.mockResolvedValue([]);
+    mocks.createReply.mockResolvedValue({ id: 'new-reply', body: 'My new reply' });
+
+    renderWithQuery(
+      <Routes>
+        <Route path="/tickets/:id" element={<TicketDetailsPage />} />
+      </Routes>,
+      { route: '/tickets/1' }
+    );
+
+    expect(await screen.findByText(/Test Ticket/i)).toBeInTheDocument();
+    expect(await screen.findByText(/No replies yet/i)).toBeInTheDocument();
+
+    // Type a reply
+    const textarea = screen.getByLabelText(/write a reply/i);
+    await userEvent.type(textarea, 'My new reply');
+
+    // Click send reply
+    const sendButton = screen.getByRole('button', { name: /send reply/i });
+    await userEvent.click(sendButton);
+
+    // Verify createReply was called
+    expect(mocks.createReply).toHaveBeenCalledWith('1', { body: 'My new reply' });
+
+    // Reply composer must still be visible
+    expect(screen.getByTestId('reply-composer')).toBeInTheDocument();
+    expect(screen.getByLabelText(/write a reply/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /send reply/i })).toBeInTheDocument();
+  });
+
+  it('keeps reply composer and typed text when reply fails', async () => {
+    mocks.useSession.mockReturnValue({
+      data: { user: mockAdminUser },
+      isPending: false,
+    });
+    mocks.fetchTicketById.mockResolvedValue(mockTicket);
+    mocks.fetchUsers.mockResolvedValue(mockAgents);
+    mocks.fetchRepliesByTicketId.mockResolvedValue([]);
+    mocks.createReply.mockRejectedValue(new Error('Failed to create reply'));
+
+    renderWithQuery(
+      <Routes>
+        <Route path="/tickets/:id" element={<TicketDetailsPage />} />
+      </Routes>,
+      { route: '/tickets/1' }
+    );
+
+    expect(await screen.findByText(/Test Ticket/i)).toBeInTheDocument();
+    expect(await screen.findByText(/No replies yet/i)).toBeInTheDocument();
+
+    // Type a reply
+    const textarea = screen.getByLabelText(/write a reply/i);
+    await userEvent.type(textarea, 'This should be kept');
+
+    // Click send reply
+    const sendButton = screen.getByRole('button', { name: /send reply/i });
+    await userEvent.click(sendButton);
+
+    // Error message should appear
+    expect(await screen.findByText(/Failed to create reply/i)).toBeInTheDocument();
+
+    // Reply composer must still be visible
+    expect(screen.getByTestId('reply-composer')).toBeInTheDocument();
+    expect(screen.getByLabelText(/write a reply/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /send reply/i })).toBeInTheDocument();
+
+    // Typed text should be preserved
+    expect(screen.getByLabelText(/write a reply/i)).toHaveValue('This should be kept');
+  });
+
+  it('shows reply composer for non-admin users too', async () => {
+    mocks.useSession.mockReturnValue({
+      data: { user: mockRegularUser },
+      isPending: false,
+    });
+    mocks.fetchTicketById.mockResolvedValue(mockTicket);
+    mocks.fetchUsers.mockResolvedValue(mockAgents);
+    mocks.fetchRepliesByTicketId.mockResolvedValue([]);
+
+    renderWithQuery(
+      <Routes>
+        <Route path="/tickets/:id" element={<TicketDetailsPage />} />
+      </Routes>,
+      { route: '/tickets/1' }
+    );
+
+    expect(await screen.findByText(/Test Ticket/i)).toBeInTheDocument();
+    expect(await screen.findByText(/No replies yet/i)).toBeInTheDocument();
+
+    // Reply composer must be visible for non-admin users too
+    expect(screen.getByTestId('reply-composer')).toBeInTheDocument();
+    expect(screen.getByLabelText(/write a reply/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /send reply/i })).toBeInTheDocument();
   });
 });

@@ -13,12 +13,13 @@ model User {
   email                          String    @unique
   emailVerified                  Boolean   @default(false)
   image                          String?
-  role                           Role      @default(AGENT)
+  role                           Role      @default(USER)
   createdAt                      DateTime  @default(now())
   updatedAt                      DateTime  @updatedAt
   deletedAt                      DateTime?
   Ticket_Ticket_assigneeIdTouser Ticket[]  @relation("Ticket_assigneeIdTouser")
   Ticket_Ticket_reporterIdTouser Ticket[]  @relation("Ticket_reporterIdTouser")
+  TicketReply_authorIdToReply    Reply[]  @relation("TicketReply_authorIdToReply")
   accounts                       Account[]
   sessions                       Session[]
 
@@ -88,6 +89,7 @@ model Ticket {
   updatedAt                    DateTime       @updatedAt
   user_Ticket_assigneeIdTouser User?          @relation("Ticket_assigneeIdTouser", fields: [assigneeId], references: [id])
   user_Ticket_reporterIdTouser User?          @relation("Ticket_reporterIdTouser", fields: [reporterId], references: [id])
+  replies                      Reply[]        @relation("TicketReplies")
 
   @@index([assigneeId])
   @@index([priority])
@@ -96,7 +98,29 @@ model Ticket {
   @@map("Ticket")
 }
 
+enum SenderType {
+  AGENT
+  CUSTOMER
+}
+
+model Reply {
+  id        String   @id @default(uuid())
+  body      String
+  ticketId  String
+  ticket    Ticket   @relation("TicketReplies", fields: [ticketId], references: [id])
+  authorId  String
+  author    User     @relation("TicketReply_authorIdToReply", fields: [authorId], references: [id])
+  senderType SenderType @default(AGENT)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ticketId])
+  @@index([authorId])
+  @@map("Reply")
+}
+
 enum Role {
+  USER
   ADMIN
   AGENT
 }

@@ -6,6 +6,10 @@ import {
   updateTicket,
   deleteTicket
 } from "./ticket.controller";
+import {
+  createReply,
+  getRepliesByTicketId
+} from "./reply.controller";
 import { asyncHandler } from "./utils/asyncHandler";
 
 const router = Router();
@@ -24,5 +28,11 @@ router.patch("/:id", asyncHandler(updateTicket));
 
 // DELETE ticket
 router.delete("/:id", asyncHandler(deleteTicket));
+
+// GET replies for a ticket
+router.get("/:id/replies", asyncHandler(getRepliesByTicketId));
+
+// POST create a reply for a ticket
+router.post("/:id/replies", asyncHandler(createReply));
 
 export default router;

@@ -397,7 +397,16 @@ export default function TicketsPage() {
                                header.column.id === 'createdAt' ? 'Created' :
                                header.column.id === 'actions' ? 'Actions' :
                                header.column.id}
-                              {header.getIsSorted() === 'asc' ? ( <ArrowUp className="ml-1 h-4 w-4 text-slate-600" /> ) : header.getIsSorted() === 'desc' ? ( <ArrowDown className="ml-1 h-4 w-4 text-slate-600" /> ) : ( <ArrowUpDown className="ml-1 h-4 w-4 text-slate-400" /> )}
+                              {() => {
+  const isSorted = header.getIsSorted();
+  if (isSorted === 'asc') {
+    return <ArrowUp className="ml-1 h-4 w-4 text-slate-600" />;
+  } else if (isSorted === 'desc') {
+    return <ArrowDown className="ml-1 h-4 w-4 text-slate-600" />;
+  } else {
+    return <ArrowUpDown className="ml-1 h-4 w-4 text-slate-400" />;
+  }
+}()}
                             </div>
                           )}
                         </th>

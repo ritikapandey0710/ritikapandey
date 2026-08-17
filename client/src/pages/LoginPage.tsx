@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { authClient } from "../lib/auth-client";
 import { useNavigate, useLocation } from "react-router-dom";
+import { Ticket } from 'lucide-react';
 
 export default function LoginPage() {
   const { data: session, isPending } = authClient.useSession();
@@ -55,23 +56,21 @@ export default function LoginPage() {
   if (session) return null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-violet-50 flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4 py-12">
+      <div className="w-full max-w-md">
         {/* Brand */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-violet-600 mb-4 shadow-lg shadow-violet-200">
-            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" />
-            </svg>
+            <Ticket className="w-6 h-6 text-white" />
           </div>
-          <h1 className="text-xl font-bold text-slate-900">Help Desk</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Help Desk</h1>
           <p className="text-sm text-slate-500 mt-1">
             {view === "login" ? "Sign in to your account" : "Create your account"}
           </p>
         </div>
 
-        {/* Card */}
-        <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/60 border border-slate-100 p-8">
+        {/* Form Card */}
+        <div className="bg-white rounded-2xl shadow-xl border border-slate-100 p-8">
           <h2 className="text-lg font-semibold text-slate-900 mb-6">
             {view === "login" ? "Welcome back" : "Get started"}
           </h2>
@@ -85,12 +84,13 @@ export default function LoginPage() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} autoComplete="off" className="space-y-4">
+          <form onSubmit={handleSubmit} autoComplete="off" className="space-y-5">
             {view === "signup" && (
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">Full Name</label>
                 <input
-                  placeholder="Full Name"
+                  type="text"
+                  placeholder="Enter your full name"
                   value={name}
                   onChange={e => setName(e.target.value)}
                   required
@@ -103,7 +103,7 @@ export default function LoginPage() {
               <label className="block text-sm font-medium text-slate-700 mb-1.5">Email</label>
               <input
                 type="email"
-                placeholder="Email"
+                placeholder="Enter your email address"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 required
@@ -115,7 +115,7 @@ export default function LoginPage() {
               <label className="block text-sm font-medium text-slate-700 mb-1.5">Password</label>
               <input
                 type="password"
-                placeholder="Password"
+                placeholder="Enter your password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 required
@@ -127,12 +127,12 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full mt-1 py-2.5 px-4 bg-violet-600 hover:bg-violet-700 disabled:opacity-60 text-white text-sm font-semibold rounded-xl transition shadow-sm shadow-violet-200 flex items-center justify-center gap-2"
+              className="w-full mt-1 flex items-center justify-center gap-2 py-2.5 px-4 bg-violet-600 hover:bg-violet-700 disabled:opacity-60 text-white text-sm font-semibold rounded-xl transition shadow-sm shadow-violet-200"
             >
               {loading && <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
               {loading
                 ? (view === "login" ? "Signing in..." : "Creating account...")
-                : (view === "login" ? "Sign in" : "Sign up")}
+                : (view === "login" ? "Sign In" : "Sign Up")}
             </button>
           </form>
 

@@ -1,8 +1,9 @@
+import { TicketStatus, TicketCategory } from '@/types/ticket';
+import axios from 'axios';
+
 /**
  * Simple API service for making requests to the backend
  */
-
-import axios from 'axios';
 
 const API_BASE_URL = "/api";
 
@@ -70,10 +71,10 @@ export async function createTicket(ticketData: {
 
 export async function updateTicket(id: string, ticketData: Partial<{
   title: string;
-  description?: string;
-  status?: string;
-  category?: string | null;
-  assigneeId?: string;
+  body?: string | null;
+  status?: TicketStatus;
+  category?: TicketCategory | null;
+  assigneeId?: string | null;
 }>) {
   const url = `/tickets/${id}`;
 
@@ -111,6 +112,32 @@ export async function fetchTicketById(id: string) {
   } catch (error: any) {
     console.error("Error fetching ticket by id:", error);
     throw new Error(`Failed to fetch ticket: ${error.response?.status || 'Unknown error'}`);
+  }
+}
+
+export async function fetchRepliesByTicketId(ticketId: string) {
+  const url = `/tickets/${ticketId}/replies`;
+
+  try {
+    const response = await api.get(url);
+    return response.data;
+  } catch (error: any) {
+    console.error("Error fetching replies:", error);
+    throw new Error(`Failed to fetch replies: ${error.response?.status || 'Unknown error'}`);
+  }
+}
+
+export async function createReply(ticketId: string, replyData: { body: string }) {
+  const url = `/tickets/${ticketId}/replies`;
+
+  try {
+    const response = await api.post(url, replyData, {
+      headers: { "Content-Type": "application/json" },
+    });
+    return response.data;
+  } catch (error: any) {
+    console.error("Error creating reply:", error);
+    throw new Error(`Failed to create reply: ${error.response?.status || 'Unknown error'}`);
   }
 }
 

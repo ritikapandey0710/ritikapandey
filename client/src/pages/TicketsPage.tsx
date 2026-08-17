@@ -6,38 +6,51 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { TicketStatus, TicketCategory, TicketPriority, TICKET_STATUSES, TICKET_CATEGORIES, TICKET_PRIORITIES } from '../types/ticket';
-import { useReactTable, getCoreRowModel, getSortedRowModel, getFilteredRowModel, getPaginationRowModel, type SortingState, type ColumnDef, type ColumnFiltersState, type FilterFn, type FilterFnOption, type PaginationState, flexRender } from '@tanstack/react-table';
 import { ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { ChevronLeft } from 'lucide-react';
+import {
+  useReactTable,
+  getCoreRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
+  flexRender,
+  type ColumnDef,
+  type ColumnFiltersState,
+  type FilterFn,
+  type FilterFnOption,
+  type SortingState,
+  type Updater,
+} from '@tanstack/react-table';
 
 const STATUS_LABELS: Record<TicketStatus, { label: string; color: string }> = {
-  [TicketStatus.OPEN]:        { label: 'Open',        color: 'bg-blue-100 text-blue-700' },
+  [TicketStatus.OPEN]: { label: 'Open', color: 'bg-blue-100 text-blue-700' },
   [TicketStatus.IN_PROGRESS]: { label: 'In Progress', color: 'bg-amber-100 text-amber-700' },
-  [TicketStatus.RESOLVED]:    { label: 'Resolved',    color: 'bg-emerald-100 text-emerald-700' },
-  [TicketStatus.CLOSED]:      { label: 'Closed',      color: 'bg-slate-100 text-slate-600' },
+  [TicketStatus.RESOLVED]: { label: 'Resolved', color: 'bg-emerald-100 text-emerald-700' },
+  [TicketStatus.CLOSED]: { label: 'Closed', color: 'bg-slate-100 text-slate-600' },
 };
 
 const CATEGORY_LABELS: Record<TicketCategory, string> = {
-  [TicketCategory.GENERAL_QUESTION]:   'General Question',
+  [TicketCategory.GENERAL_QUESTION]: 'General Question',
   [TicketCategory.TECHNICAL_QUESTION]: 'Technical Question',
-  [TicketCategory.REFUND_REQUEST]:     'Refund Request',
+  [TicketCategory.REFUND_REQUEST]: 'Refund Request',
 };
 
 const PRIORITY_LABELS: Record<TicketPriority, { label: string; color: string }> = {
-  [TicketPriority.LOW]:      { label: 'Low',      color: 'bg-green-100 text-green-700' },
-  [TicketPriority.MEDIUM]:   { label: 'Medium',   color: 'bg-yellow-100 text-yellow-700' },
-  [TicketPriority.HIGH]:     { label: 'High',     color: 'bg-orange-100 text-orange-700' },
-  [TicketPriority.URGENT]:   { label: 'Urgent',   color: 'bg-red-100 text-red-700' },
+  [TicketPriority.LOW]: { label: 'Low', color: 'bg-green-100 text-green-700' },
+  [TicketPriority.MEDIUM]: { label: 'Medium', color: 'bg-yellow-100 text-yellow-700' },
+  [TicketPriority.HIGH]: { label: 'High', color: 'bg-orange-100 text-orange-700' },
+  [TicketPriority.URGENT]: { label: 'Urgent', color: 'bg-red-100 text-red-700' },
 };
 
-
 const createTicketSchema = z.object({
-  subject:     z.string().trim().min(3, 'Subject must be at least 3 characters'),
-  body:        z.string().trim().optional(),
-  senderName:  z.string().trim().min(1, 'Sender name is required'),
+  subject: z.string().trim().min(3, 'Subject must be at least 3 characters'),
+  body: z.string().trim().optional(),
+  senderName: z.string().trim().min(1, 'Sender name is required'),
   senderEmail: z.string().email('Invalid email address'),
-  category:    z.union([z.literal('GENERAL_QUESTION'), z.literal('TECHNICAL_QUESTION'), z.literal('REFUND_REQUEST')]).optional(),
-  status:      z.union([z.literal('OPEN'), z.literal('IN_PROGRESS'), z.literal('RESOLVED'), z.literal('CLOSED')]).default('OPEN'),
+  category: z.preprocess((v) => (v === '' ? undefined : v), z.union([z.literal('GENERAL_QUESTION'), z.literal('TECHNICAL_QUESTION'), z.literal('REFUND_REQUEST')]).optional()),
+  status: z.union([z.literal('OPEN'), z.literal('IN_PROGRESS'), z.literal('RESOLVED'), z.literal('CLOSED')]).default('OPEN' as TicketStatus),
 });
 
 function CreateTicketModal({ isOpen, onClose, onSuccess }: {
@@ -88,7 +101,7 @@ function CreateTicketModal({ isOpen, onClose, onSuccess }: {
             <input
               {...register('subject')}
               placeholder="Describe the issue briefly"
-              className={`w-full px-3.5 py-2.5 text-sm rounded-xl border bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition ${errors.subject ? 'border-red-300' : 'border-slate-200'}`}
+              className="w-full px-3.5 py-2.5 text-sm rounded-xl border bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition ${errors.subject ? 'border-red-300' : 'border-slate-200'}"
             />
             {errors.subject && <p className="mt-1 text-xs text-red-600">{errors.subject.message}</p>}
           </div>
@@ -111,7 +124,7 @@ function CreateTicketModal({ isOpen, onClose, onSuccess }: {
               <input
                 {...register('senderName')}
                 placeholder="John Doe"
-                className={`w-full px-3.5 py-2.5 text-sm rounded-xl border bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition ${errors.senderName ? 'border-red-300' : 'border-slate-200'}`}
+                className="w-full px-3.5 py-2.5 text-sm rounded-xl border bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition ${errors.senderName ? 'border-red-300' : 'border-slate-200'}"
               />
               {errors.senderName && <p className="mt-1 text-xs text-red-600">{errors.senderName.message}</p>}
             </div>
@@ -121,7 +134,7 @@ function CreateTicketModal({ isOpen, onClose, onSuccess }: {
                 {...register('senderEmail')}
                 type="email"
                 placeholder="john@example.com"
-                className={`w-full px-3.5 py-2.5 text-sm rounded-xl border bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition ${errors.senderEmail ? 'border-red-300' : 'border-slate-200'}`}
+                className="w-full px-3.5 py-2.5 text-sm rounded-xl border bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition ${errors.senderEmail ? 'border-red-300' : 'border-slate-200'}"
               />
               {errors.senderEmail && <p className="mt-1 text-xs text-red-600">{errors.senderEmail.message}</p>}
             </div>
@@ -132,7 +145,7 @@ function CreateTicketModal({ isOpen, onClose, onSuccess }: {
               <label className="block text-sm font-medium text-slate-700 mb-1.5">Category <span className="text-slate-400 font-normal">(optional)</span></label>
               <select
                 {...register('category')}
-                className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50 text-slate-900 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition"
+                className="w-full px-3.5 py-2.5 text-sm rounded-xl border bg-slate-50 text-slate-900 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition"
               >
                 <option value="">— None —</option>
                 {TICKET_CATEGORIES.map(cat => (
@@ -144,7 +157,7 @@ function CreateTicketModal({ isOpen, onClose, onSuccess }: {
               <label className="block text-sm font-medium text-slate-700 mb-1.5">Status</label>
               <select
                 {...register('status')}
-                className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50 text-slate-900 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition"
+                className="w-full px-3.5 py-2.5 text-sm rounded-xl border bg-slate-50 text-slate-900 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition"
               >
                 {TICKET_STATUSES.map(s => (
                   <option key={s} value={s}>{STATUS_LABELS[s].label}</option>
@@ -278,7 +291,7 @@ export default function TicketsPage() {
 
   // Pagination state
   const [paginationState, setPaginationState] = useState({ pageIndex: 0, pageSize: 10 });
-  const setPagination = useCallback((updater) => {
+  const setPagination = useCallback((updater: Updater<{ pageIndex: number; pageSize: number }>) => {
     setPaginationState((prev) => {
       return typeof updater === 'function' ? updater(prev) : updater;
     });
@@ -323,7 +336,7 @@ export default function TicketsPage() {
             </div>
           </Link>
         );
-      },
+      }
     },
     {
       accessorKey: 'senderName',
@@ -339,7 +352,7 @@ export default function TicketsPage() {
             <span className="text-sm font-medium">{val}</span>
           </div>
         );
-      },
+      }
     },
     {
       accessorKey: 'status',
@@ -354,7 +367,7 @@ export default function TicketsPage() {
             {labelInfo.label}
           </span>
         );
-      },
+      }
     },
     {
       accessorKey: 'category',
@@ -366,15 +379,11 @@ export default function TicketsPage() {
         if (!category) return <span className="text-xs text-slate-500 italic">—</span>;
         const label = CATEGORY_LABELS[category];
         return (
-          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-            category === 'GENERAL_QUESTION' ? 'bg-violet-100 text-violet-700' :
-            category === 'TECHNICAL_QUESTION' ? 'bg-blue-100 text-blue-700' :
-            'bg-pink-100 text-pink-700'
-          }`}>
+          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${category === 'GENERAL_QUESTION' ? 'bg-violet-100 text-violet-700' : category === 'TECHNICAL_QUESTION' ? 'bg-blue-100 text-blue-700' : 'bg-pink-100 text-pink-700'}`}>
             {label}
           </span>
         );
-      },
+      }
     },
     {
       accessorKey: 'priority',
@@ -389,7 +398,7 @@ export default function TicketsPage() {
             {labelInfo.label}
           </span>
         );
-      },
+      }
     },
     {
       accessorKey: 'assigneeId',
@@ -407,7 +416,7 @@ export default function TicketsPage() {
             <span className="text-xs">{assignedTo}</span>
           </div>
         );
-      },
+      }
     },
     {
       accessorKey: 'createdAt',
@@ -421,7 +430,7 @@ export default function TicketsPage() {
             {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
           </span>
         );
-      },
+      }
     },
     {
       id: 'actions',
@@ -449,8 +458,8 @@ export default function TicketsPage() {
             View
           </button>
         </div>
-      ),
-    },
+      )
+    }
   ], []);
 
   // Build column filters from the dropdown states
@@ -484,7 +493,7 @@ export default function TicketsPage() {
         return ticketNumber.toString();
       }
       return (row as any).id;
-    },
+    }
   });
 
   const filteredRowCount = table.getFilteredRowModel().rows.length;
@@ -492,6 +501,16 @@ export default function TicketsPage() {
   const endIndex = Math.min(startIndex + paginationState.pageSize - 1, filteredRowCount);
   const hasRows = table.getRowModel().rows.length > 0;
   const noResults = hasAnyFilter && !hasRows && (tickets?.length ?? 0) > 0;
+
+  // Show spinner while auth is pending (session loading) - BEFORE isLoading check
+  // because enabled=false when authPending=true means isLoading is never true
+  if (authPending) {
+    return (
+      <div className="flex items-center justify-center min-h-[calc(100vh-56px)]">
+        <div className="w-8 h-8 border-4 border-violet-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -539,7 +558,8 @@ export default function TicketsPage() {
 
         {/* Filter toolbar */}
         <div className="mb-4 bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-4">
+            {/* Global search */}
             <div className="relative">
               <svg className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -549,7 +569,7 @@ export default function TicketsPage() {
                 value={globalFilter}
                 onChange={(e) => setGlobalFilter(e.target.value)}
                 placeholder="Search tickets..."
-                className="w-full pl-9 pr-9 py-2.5 text-sm rounded-xl border border-slate-200 bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition"
+                className="w-full pl-10 pr-3 py-2.5 text-sm rounded-xl border bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition"
               />
               {globalFilter && (
                 <button
@@ -564,11 +584,12 @@ export default function TicketsPage() {
               )}
             </div>
 
+            {/* Filter selects in a compact row */}
             <div className="flex flex-wrap items-center gap-2">
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-3 py-2 text-sm rounded-xl border border-slate-200 bg-slate-50 text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition"
+                className="px-3 py-2 text-sm rounded-xl border bg-slate-50 text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition"
               >
                 <option value="">All Statuses</option>
                 {TICKET_STATUSES.map(s => (
@@ -579,7 +600,7 @@ export default function TicketsPage() {
               <select
                 value={priorityFilter}
                 onChange={(e) => setPriorityFilter(e.target.value)}
-                className="px-3 py-2 text-sm rounded-xl border border-slate-200 bg-slate-50 text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition"
+                className="px-3 py-2 text-sm rounded-xl border bg-slate-50 text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition"
               >
                 <option value="">All Priorities</option>
                 {TICKET_PRIORITIES.map(p => (
@@ -590,7 +611,7 @@ export default function TicketsPage() {
               <select
                 value={categoryFilter}
                 onChange={(e) => setCategoryFilter(e.target.value)}
-                className="px-3 py-2 text-sm rounded-xl border border-slate-200 bg-slate-50 text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition"
+                className="px-3 py-2 text-sm rounded-xl border bg-slate-50 text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition"
               >
                 <option value="">All Categories</option>
                 {availableCategories.map(c => (
@@ -602,7 +623,7 @@ export default function TicketsPage() {
               <select
                 value={assigneeFilter}
                 onChange={(e) => setAssigneeFilter(e.target.value)}
-                className="px-3 py-2 text-sm rounded-xl border border-slate-200 bg-slate-50 text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition"
+                className="px-3 py-2 text-sm rounded-xl border bg-slate-50 text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition"
               >
                 <option value="">All Assignees</option>
                 {availableAssignees.map(a => (
@@ -614,7 +635,7 @@ export default function TicketsPage() {
               <select
                 value={dateFilter}
                 onChange={(e) => setDateFilter(e.target.value)}
-                className="px-3 py-2 text-sm rounded-xl border border-slate-200 bg-slate-50 text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition"
+                className="px-3 py-2 text-sm rounded-xl border bg-slate-50 text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition"
               >
                 <option value="">All Dates</option>
                 <option value="today">Today</option>
@@ -724,7 +745,7 @@ export default function TicketsPage() {
               onChange={(e) => {
                 setPaginationState({ pageIndex: 0, pageSize: Number(e.target.value) });
               }}
-              className="px-3 py-2 text-sm rounded-xl border border-slate-200 bg-slate-50 text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition"
+              className="px-3 py-2 text-sm rounded-xl border bg-slate-50 text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition"
             >
               {[10, 25, 50, 100].map((size) => (
                 <option key={size} value={size}>
@@ -736,20 +757,14 @@ export default function TicketsPage() {
 
           <div className="flex items-center space-x-4">
             <button
-              onClick={() =>
+              onClick={() => {
                 setPaginationState((prev) => ({
                   pageIndex: Math.max(prev.pageIndex - 1, 0),
                   pageSize: prev.pageSize,
                 }))
-              }
+              }}
               disabled={paginationState.pageIndex === 0}
-              className={`
-                flex items-center gap-2 px-3 py-2 text-sm font-medium
-                ${paginationState.pageIndex === 0
-                  ? 'text-slate-400 hover:text-slate-500'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'}
-                rounded-xl transition
-              `}
+              className={`flex items-center gap-2 px-3 py-2 text-sm font-medium ${paginationState.pageIndex === 0 ? 'text-slate-400 hover:text-slate-500' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'} rounded-xl transition`}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -762,30 +777,17 @@ export default function TicketsPage() {
             </span>
 
             <button
-              onClick={() =>
+              onClick={() => {
                 setPaginationState((prev) => ({
-                  pageIndex:
-                    Math.min(
-                      prev.pageIndex + 1,
-                      Math.ceil(filteredRowCount / prev.pageSize) - 1
-                    ),
+                  pageIndex: Math.min(prev.pageIndex + 1, Math.ceil(filteredRowCount / prev.pageSize) - 1),
                   pageSize: prev.pageSize,
                 }))
-              }
+              }}
               disabled={
-                paginationState.pageIndex >=
-                Math.ceil(filteredRowCount / paginationState.pageSize) - 1 ||
+                paginationState.pageIndex >= Math.ceil(filteredRowCount / paginationState.pageSize) - 1 ||
                 filteredRowCount === 0
               }
-              className={`
-                flex items-center gap-2 px-3 py-2 text-sm font-medium
-                ${paginationState.pageIndex >=
-                Math.ceil(filteredRowCount / paginationState.pageSize) - 1 ||
-                filteredRowCount === 0
-                  ? 'text-slate-400 hover:text-slate-500'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'}
-                rounded-xl transition
-              `}
+              className={`flex items-center gap-2 px-3 py-2 text-sm font-medium ${paginationState.pageIndex >= Math.ceil(filteredRowCount / paginationState.pageSize) - 1 || filteredRowCount === 0 ? 'text-slate-400 hover:text-slate-500' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'} rounded-xl transition`}
             >
               Next
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -802,7 +804,6 @@ export default function TicketsPage() {
             onSuccess={() => queryClient.invalidateQueries({ queryKey: ['tickets'] })}
           />
         )}
-
       </div>
     </div>
   );

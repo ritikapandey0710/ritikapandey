@@ -1,5 +1,4 @@
 import { defineConfig } from 'vitest/config';
-import react from '@vitejs/plugin-react-swc';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
@@ -8,7 +7,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 export default defineConfig({
-  // Use esbuild for JSX instead of SWC plugin (SWC may interfere with vi.mock hoisting)
   esbuild: {
     jsx: 'automatic',
     jsxImportSource: 'react',

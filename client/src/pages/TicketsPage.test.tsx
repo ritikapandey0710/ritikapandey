@@ -27,25 +27,29 @@ const mockSession = { user: { id: '1', name: 'Test User', email: 'test@example.c
 const mockTickets = [
   {
     id: 'ticket-1',
-    subject: 'Login issue',
+    ticketNumber: 1,
+    title: 'Login issue',
     body: 'Cannot log in',
     senderName: 'Alice',
     senderEmail: 'alice@example.com',
     status: 'OPEN',
+    priority: 'MEDIUM',
     category: 'TECHNICAL_QUESTION',
-    assignedTo: null,
+    assigneeId: null,
     createdAt: '2024-01-02T00:00:00Z',
     updatedAt: '2024-01-02T00:00:00Z',
   },
   {
     id: 'ticket-2',
-    subject: 'Refund request',
+    ticketNumber: 2,
+    title: 'Refund request',
     body: null,
     senderName: 'Bob',
     senderEmail: 'bob@example.com',
     status: 'RESOLVED',
+    priority: 'HIGH',
     category: 'REFUND_REQUEST',
-    assignedTo: 'agent@example.com',
+    assigneeId: 'agent@example.com',
     createdAt: '2024-01-01T00:00:00Z',
     updatedAt: '2024-01-03T00:00:00Z',
   },
@@ -72,10 +76,11 @@ beforeEach(() => {
 });
 
 describe('TicketsPage', () => {
-  it('shows loading skeletons while fetching', () => {
+  it('shows loading spinner while fetching', () => {
     vi.mocked(fetchTickets).mockReturnValue(new Promise(() => {}));
     renderPage();
-    expect(document.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0);
+    // Current application uses an animate-spin spinner for loading
+    expect(document.querySelectorAll('.animate-spin').length).toBeGreaterThan(0);
   });
 
   it('renders ticket rows when data loads', async () => {
@@ -84,13 +89,13 @@ describe('TicketsPage', () => {
     await screen.findByText('Login issue');
     expect(screen.getByText('Refund request')).toBeInTheDocument();
     expect(screen.getByText('Alice')).toBeInTheDocument();
-    expect(screen.getByText('alice@example.com')).toBeInTheDocument();
+    // senderEmail is not displayed as a separate column in the current UI
   });
 
   it('shows correct ticket count in header', async () => {
     vi.mocked(fetchTickets).mockResolvedValue(mockTickets);
     renderPage();
-    await screen.findByText('2 tickets');
+    await screen.findByText(/1-2 of 2 tickets/);
   });
 
   it('shows empty state when no tickets', async () => {
@@ -109,15 +114,27 @@ describe('TicketsPage', () => {
   it('renders status badges correctly', async () => {
     vi.mocked(fetchTickets).mockResolvedValue(mockTickets);
     renderPage();
-    await screen.findByText('Open');
-    expect(screen.getByText('Resolved')).toBeInTheDocument();
+    // Use getAllByText since both filter options and badges have status text
+    await waitFor(() => {
+      expect(screen.getAllByText(/Open/).length).toBeGreaterThan(0);
+    });
+    // Verify the actual badge (span) elements exist in the table
+    const row = screen.getAllByRole('row')[1]; // first data row
+    expect(row.textContent).toContain('Open');
+    const row2 = screen.getAllByRole('row')[2]; // second data row
+    expect(row2.textContent).toContain('Resolved');
   });
 
   it('renders category labels correctly', async () => {
     vi.mocked(fetchTickets).mockResolvedValue(mockTickets);
     renderPage();
-    await screen.findByText('Technical Question');
-    expect(screen.getByText('Refund Request')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getAllByText(/Technical Question/).length).toBeGreaterThan(0);
+    });
+    const row = screen.getAllByRole('row')[1];
+    expect(row.textContent).toContain('Technical Question');
+    const row2 = screen.getAllByRole('row')[2];
+    expect(row2.textContent).toContain('Refund Request');
   });
 
   it('renders dash for null assignedTo', async () => {
