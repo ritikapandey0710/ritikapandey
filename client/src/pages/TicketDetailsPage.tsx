@@ -34,7 +34,37 @@ export default function TicketDetailsPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { data: session } = authClient.useSession();
+  const { data: session, isPending } = authClient.useSession();
+
+  // Handle loading state
+  if (isPending) {
+    return (
+      <div className="flex items-center justify-center min-h-[calc(100vh-56px)]">
+        <div
+          className="w-8 h-8 border-4 border-violet-600 border-t-transparent rounded-full animate-spin"
+          data-testid="loading-indicator"
+        />
+      </div>
+    );
+  }
+
+  // Handle unauthenticated state
+  if (!session) {
+    return (
+      <div className="flex items-center justify-center min-h-[calc(100vh-56px)]">
+        <div className="text-center">
+          <p className="mb-4 text-slate-600">Please log in to view ticket details</p>
+          <a
+            href="/login"
+            className="px-4 py-2 text-sm font-semibold text-white bg-violet-600 hover:bg-violet-700 rounded-lg transition"
+          >
+            Log In
+          </a>
+        </div>
+      </div>
+    );
+  }
+
   const user = session?.user as AuthUser | undefined;
   const isAdmin = user?.role === UserRole.ADMIN;
 
@@ -42,7 +72,7 @@ export default function TicketDetailsPage() {
   const { data: ticket, isLoading, isError, error } = useQuery({
     queryKey: ['ticket', id],
     queryFn: () => fetchTicketById(id!),
-    enabled: !!id,
+    enabled: !!id && !!session,
   });
 
   // Fetch replies
@@ -54,7 +84,7 @@ export default function TicketDetailsPage() {
   } = useQuery({
     queryKey: ['replies', id],
     queryFn: () => fetchRepliesByTicketId(id!),
-    enabled: !!id,
+    enabled: !!id && !!session,
   });
 
   // Fetch agents
@@ -66,6 +96,10 @@ export default function TicketDetailsPage() {
 
   useEffect(() => {
     const fetchAgents = async () => {
+      if (!session) {
+        setAgents([]);
+        return;
+      }
       try {
         const users = await fetchUsers();
         const agentUsers = users.filter((u: any) => u.role === UserRole.AGENT);
@@ -75,7 +109,7 @@ export default function TicketDetailsPage() {
       }
     };
     fetchAgents();
-  }, []);
+  }, [session]);
 
   const handleBack = () => {
     navigate(-1);
@@ -373,7 +407,7 @@ export default function TicketDetailsPage() {
               isSubmitting={isSubmittingReply}
               submitError={replyError}
               submitSuccess={replySuccess}
-              agentName={user?.name}
+              ticketId={ticket.id}
               customerName={ticket.senderName}
               subject={ticket.title}
             />

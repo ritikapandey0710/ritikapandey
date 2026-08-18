@@ -7,7 +7,7 @@ interface ReplyFormProps {
   isSubmitting: boolean;
   submitError: string | null;
   submitSuccess: boolean;
-  agentName?: string;
+  ticketId?: string;
   customerName?: string;
   subject?: string;
 }
@@ -17,7 +17,7 @@ export const ReplyForm: React.FC<ReplyFormProps> = ({
   isSubmitting,
   submitError,
   submitSuccess,
-  agentName,
+  ticketId,
   customerName,
   subject,
 }) => {
@@ -33,7 +33,7 @@ export const ReplyForm: React.FC<ReplyFormProps> = ({
 
     try {
       // Call the server-side AI polish endpoint with agent, customer, and subject info
-      const result = await polishReply(replyBody, agentName, customerName, subject);
+      const result = await polishReply(replyBody, ticketId, customerName, subject);
 
       // Update the textarea with the polished version
       setReplyBody(result.polished);

@@ -141,11 +141,11 @@ export async function createReply(ticketId: string, replyData: { body: string })
   }
 }
 
-export async function polishReply(text: string, agentName?: string, customerName?: string, subject?: string) {
+export async function polishReply(text: string, ticketId?: string, customerName?: string, subject?: string) {
   const url = `/ai/polish`;
 
   try {
-    const response = await api.post(url, { subject, text, agentName, customerName }, {
+    const response = await api.post(url, { subject, text, ticketId, customerName }, {
       headers: { "Content-Type": "application/json" },
     });
     return response.data;

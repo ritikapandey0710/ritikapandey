@@ -1,3 +1,11 @@
+import { prisma } from './prisma';
+
+// Placeholder for summarizeTicket function - to be implemented
+export async function summarizeTicket(_req: any, res: any) {
+  // TODO: Implement ticket summarization using AI
+  return res.status(501).json({ error: "Ticket summarization not implemented yet" });
+}
+
 // Reply Form "Polish" feature using the Google Gemini API (free tier).
 //
 // IMPORTANT: The Gemini API key is read from the server environment variable
@@ -40,7 +48,7 @@ const INCOMPLETE_FINISH_REASONS = new Set([
 ]);
 
 export async function polishReply(req: any, res: any) {
-  const { subject, text, agentName, customerName } = req.body;
+  const { subject, text, ticketId, customerName } = req.body;
 
   if (!text || text.trim() === "") {
     return res.status(400).json({ error: "Reply text is required" });
@@ -58,7 +66,26 @@ export async function polishReply(req: any, res: any) {
   }
 
   const customerFirstName = customerName ? customerName.split(" ")[0] : "there";
-  const agent = agentName || "Support Team";
+
+  // Fetch the ticket to get the assigned agent's name from the database
+  let agent = "Support Team";
+  if (ticketId) {
+    try {
+      const ticket = await prisma.ticket.findUnique({
+        where: { id: ticketId },
+        include: {
+          user_Ticket_assigneeIdTouser: {
+            select: { name: true }
+          }
+        }
+      });
+      if (ticket?.user_Ticket_assigneeIdTouser?.name) {
+        agent = ticket.user_Ticket_assigneeIdTouser.name;
+      }
+    } catch (error) {
+      console.error("Failed to fetch ticket assignee:", error);
+    }
+  }
   const ticketSubject = subject ? subject.trim() : "";
 
   const prompt = `You are a professional Help Desk agent reviewing a draft reply before sending it to a customer. Your job is to polish the draft into a clear, professional, and natural customer-support response.
