@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   fetchUsers: vi.fn(),
   fetchRepliesByTicketId: vi.fn(),
   createReply: vi.fn(),
+  polishReply: vi.fn(),
+  summarizeTicket: vi.fn(),
 }));
 
 // Mock the API functions
@@ -24,6 +26,8 @@ vi.mock('../api', () => {
     fetchUsers: mocks.fetchUsers,
     fetchRepliesByTicketId: mocks.fetchRepliesByTicketId,
     createReply: mocks.createReply,
+    polishReply: mocks.polishReply,
+    summarizeTicket: mocks.summarizeTicket,
   };
 });
 

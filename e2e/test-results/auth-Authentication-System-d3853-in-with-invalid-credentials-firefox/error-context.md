@@ -12,15 +12,13 @@
 # Error details
 
 ```
-Error: expect(locator).toContainText(expected) failed
+Test timeout of 30000ms exceeded.
+```
 
-Locator: .bg-destructive/10
-Expected pattern: /invalid|incorrect|failed/i
-Error: Unexpected token "/" while parsing css selector ".bg-destructive/10". Did you mean to CSS.escape it?
-
+```
+Error: locator.fill: Test timeout of 30000ms exceeded.
 Call log:
-  - Expect "toContainText" with timeout 5000ms
-  - waiting for .bg-destructive/10
+  - waiting for locator('input[placeholder="Email"]').first()
 
 ```
 
@@ -29,26 +27,32 @@ Call log:
 ```yaml
 - generic [ref=e4]:
   - generic [ref=e5]:
-    - heading "Help Desk" [level=1] [ref=e9]
-    - paragraph [ref=e10]: Sign in to your account
-  - generic [ref=e11]:
-    - heading "Welcome back" [level=2] [ref=e12]
-    - generic [ref=e13]:
-      - generic [ref=e14]:
-        - generic [ref=e15]: Email
-        - textbox "Email" [ref=e16]: wronguser_rwn85lpz@example.com
+    - heading "Help Desk" [level=1] [ref=e12]
+    - paragraph [ref=e13]: Sign in to your account
+  - generic [ref=e14]:
+    - heading "Welcome back" [level=2] [ref=e15]
+    - generic [ref=e16]:
       - generic [ref=e17]:
-        - generic [ref=e18]: Password
-        - textbox "Password" [ref=e19]: WrongPass123!
-      - button "Signing in..." [disabled] [ref=e20]
-    - paragraph [ref=e22]:
+        - generic [ref=e18]: Email
+        - textbox "Enter your email address" [ref=e19]
+      - generic [ref=e20]:
+        - generic [ref=e21]: Password
+        - textbox "Enter your password" [ref=e22]
+      - button "Sign In" [ref=e23]
+    - paragraph [ref=e24]:
       - text: Don't have an account?
-      - button "Sign up" [ref=e23]
+      - button "Sign up" [ref=e25]
 ```
 
 # Test source
 
 ```ts
+  150 | 
+  151 |     // Now log out to clear the session
+  152 |     await page.click('button:has-text("Sign out")');
+  153 |     await page.waitForTimeout(1000);
+  154 |     await page.reload({ waitUntil: 'networkidle' });
+  155 |     await page.waitForTimeout(2000);
   156 | 
   157 |     // Now attempt to sign up again with the same email
   158 |     await page.waitForURL(/.*\/login/, { waitUntil: 'networkidle', timeout: 5000 });
@@ -143,14 +147,14 @@ Call log:
   247 |     await expect(page.locator('h2:has-text("Welcome back")')).toBeVisible({ timeout: 5000 });
   248 | 
   249 |     // Fill in the sign in form with wrong credentials
-  250 |     await page.locator('input[placeholder="Email"]').nth(0).fill(email);
+> 250 |     await page.locator('input[placeholder="Email"]').nth(0).fill(email);
+      |                                                             ^ Error: locator.fill: Test timeout of 30000ms exceeded.
   251 |     await page.locator('input[placeholder="Password"]').nth(0).fill(password);
   252 | 
   253 |     await page.click('button[type="submit"]:has-text("Sign in")');
   254 | 
   255 |     // Wait for error message
-> 256 |     await expect(page.locator('.bg-destructive/10')).toContainText(/invalid|incorrect|failed/i);
-      |                                                      ^ Error: expect(locator).toContainText(expected) failed
+  256 |     await expect(page.locator('.bg-destructive/10')).toContainText(/invalid|incorrect|failed/i);
   257 |   });
   258 | 
   259 |   test('should allow a user to sign out', async ({ page, request }) => {
@@ -245,10 +249,4 @@ Call log:
   348 | 
   349 |     // Verify we're logged in
   350 |     await expect(page.locator('text=Welcome back, ' + name + '!')).toBeVisible({ timeout: 5000 });
-  351 | 
-  352 |     // Now try to access a protected route, e.g., the home page (which should be accessible)
-  353 |     // We are already on home, so let's try to go to another page if exists, or refresh home
-  354 |     // For simplicity, we'll just verify that we are on home and the content is visible
-  355 |     await expect(page.locator('text=Welcome back, ' + name + '!')).toBeVisible({ timeout: 5000 });
-  356 |     // Additionally, we can check for an element that is only visible when logged in, like the sign out button
 ```

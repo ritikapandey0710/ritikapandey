@@ -141,7 +141,7 @@ export async function createReply(ticketId: string, replyData: { body: string })
   }
 }
 
-export async function polishReply(text: string, ticketId?: string, customerName?: string, subject?: string) {
+export async function polishReply(text: string, ticketId?: string, customerName?: string, subject?: string): Promise<{ polished: string }> {
   const url = `/ai/polish`;
 
   try {
@@ -151,7 +151,33 @@ export async function polishReply(text: string, ticketId?: string, customerName?
     return response.data;
   } catch (error: any) {
     console.error("Error polishing reply:", error);
-    throw new Error(`Failed to polish reply: ${error.response?.data?.error || error.response?.status || 'Unknown error'}`);
+
+    // Detect HTTP 429 (rate limit / quota exceeded) from the express-rate-limit middleware
+    if (error.response?.status === 429) {
+      throw new Error(
+        "You've reached the request limit for reply polishing. " +
+        "Please wait a moment and try again later."
+      );
+    }
+
+    throw new Error(
+      error.response?.data?.error ||
+      `Failed to polish reply: ${error.response?.status || 'Unknown error'}`
+    );
+  }
+}
+
+export async function summarizeTicket(ticketId: string) {
+  const url = `/ai/summarize`;
+
+  try {
+    const response = await api.post(url, { ticketId }, {
+      headers: { "Content-Type": "application/json" },
+    });
+    return response.data;
+  } catch (error: any) {
+    console.error("Error summarizing ticket:", error);
+    throw new Error(`Failed to summarize ticket: ${error.response?.data?.error || error.response?.status || 'Unknown error'}`);
   }
 }
 

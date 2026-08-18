@@ -7,6 +7,7 @@ import {
   fetchUsers,
   fetchRepliesByTicketId,
   createReply,
+  summarizeTicket,
 } from '../api';
 import { TicketStatus, TicketCategory, TicketPriority } from '../types/ticket';
 import { UserRole } from '@/types/role';
@@ -21,7 +22,7 @@ import {
 import UpdateTicket from '../components/UpdateTicket';
 import { ReplyThread } from '../components/ReplyThread';
 import { ReplyForm } from '../components/ReplyForm';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, Sparkles } from 'lucide-react';
 
 // Local category badge color classes (preserved for test compatibility)
 const CATEGORY_BADGE: Record<string, string> = {
@@ -67,6 +68,11 @@ export default function TicketDetailsPage() {
 
   const user = session?.user as AuthUser | undefined;
   const isAdmin = user?.role === UserRole.ADMIN;
+
+  // Summary state
+  const [summary, setSummary] = useState<string | null>(null);
+  const [isSummarizing, setIsSummarizing] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
 
   // Fetch ticket
   const { data: ticket, isLoading, isError, error } = useQuery({
@@ -138,6 +144,24 @@ export default function TicketDetailsPage() {
       throw err;
     } finally {
       setIsSubmittingReply(false);
+    }
+  };
+
+  const handleSummarizeClick = async () => {
+    if (!id || !ticket) return;
+
+    setIsSummarizing(true);
+    setSummaryError(null);
+    setSummary(null); // Clear previous summary to force regeneration
+
+    try {
+      const result = await summarizeTicket(id!);
+      setSummary(result.summary || result.text || 'No summary generated');
+    } catch (err: any) {
+      const msg = err?.response?.data?.error || err?.message || 'Failed to generate summary';
+      setSummaryError(msg);
+    } finally {
+      setIsSummarizing(false);
     }
   };
 
@@ -386,7 +410,48 @@ export default function TicketDetailsPage() {
           </div>
         </div>
 
-        {/* Reply section */}
+        {/* AI Summary Section */}
+      {ticket && (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-semibold text-slate-900">AI Summary</h3>
+            <button
+              onClick={handleSummarizeClick}
+              disabled={isSummarizing || !ticket}
+              className={`flex items-center gap-2 px-3 py-1.5 text-sm font-semibold text-white bg-gray-600 hover:bg-gray-700 rounded-xl transition shadow-sm shadow-gray-200 ${
+                isSummarizing ? 'bg-gray-500' : ''
+              }`}
+            >
+              {isSummarizing ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4" />
+                  <span>Summarize</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {summaryError && (
+            <p className="mb-3 text-xs text-red-600">{summaryError}</p>
+          )}
+
+          {summary && (
+            <div className="whitespace-pre-line text-sm text-slate-700 bg-slate-50 p-4 rounded-xl">
+              {summary}
+            </div>
+          )}
+
+          {!summary && !summaryError && !isSummarizing && (
+            <p className="text-xs text-slate-500 italic">Click ✨ Summarize to generate an AI summary of this ticket and conversation</p>
+          )}
+        </div>
+      )}
+
+      {/* Reply section */}
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
           <h3 className="text-base font-semibold text-slate-900 mb-4">Replies</h3>
           <ReplyThread

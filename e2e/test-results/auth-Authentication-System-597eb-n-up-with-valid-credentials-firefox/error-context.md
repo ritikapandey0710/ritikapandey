@@ -12,29 +12,32 @@
 # Error details
 
 ```
+Test timeout of 30000ms exceeded.
+```
+
+```
 Error: expect(locator).toBeVisible() failed
 
 Locator: locator('input[placeholder="Full Name"]')
 Expected: visible
-Timeout: 5000ms
 Error: element(s) not found
 
 Call log:
   - Expect "toBeVisible" with timeout 5000ms
   - waiting for locator('input[placeholder="Full Name"]')
+  - Test timeout of 30000ms exceeded.
 
 ```
 
 ```yaml
-- img
 - heading "Help Desk" [level=1]
 - paragraph: Sign in to your account
 - heading "Welcome back" [level=2]
 - text: Email
-- textbox "Email"
+- textbox "Enter your email address"
 - text: Password
-- textbox "Password"
-- button "Sign in"
+- textbox "Enter your password"
+- button "Sign In"
 - paragraph:
   - text: Don't have an account?
   - button "Sign up"

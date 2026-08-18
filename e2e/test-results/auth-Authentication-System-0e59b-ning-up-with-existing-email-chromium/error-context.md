@@ -26,15 +26,14 @@ Call log:
 ```
 
 ```yaml
-- img
 - heading "Help Desk" [level=1]
 - paragraph: Sign in to your account
 - heading "Welcome back" [level=2]
 - text: Email
-- textbox "Email"
+- textbox "Enter your email address"
 - text: Password
-- textbox "Password"
-- button "Sign in"
+- textbox "Enter your password"
+- button "Sign In"
 - paragraph:
   - text: Don't have an account?
   - button "Sign up"

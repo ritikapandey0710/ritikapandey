@@ -1,18 +1,12 @@
 import { prisma } from './prisma';
 
-// Placeholder for summarizeTicket function - to be implemented
-export async function summarizeTicket(_req: any, res: any) {
-  // TODO: Implement ticket summarization using AI
-  return res.status(501).json({ error: "Ticket summarization not implemented yet" });
-}
-
 // Reply Form "Polish" feature using the Google Gemini API (free tier).
 //
 // IMPORTANT: The Gemini API key is read from the server environment variable
 // `GEMINI_API_KEY` and is used ONLY on the server when calling Google's
 // generateContent endpoint. It is never sent to, embedded in, or returned to
 // the React client. The client only talks to the `/api/ai/polish` endpoint.
-
+//
 // Currently-supported Gemini model that is eligible for the free tier.
 const GEMINI_MODEL = "gemini-3.6-flash";
 const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
@@ -138,7 +132,7 @@ Return ONLY the final customer-ready reply.`;
           },
         ],
         generationConfig: {
-          maxOutputTokens: 1024,
+          maxOutputTokens: 4096,
           temperature: 0.3,
         },
       }),
@@ -189,6 +183,166 @@ Return ONLY the final customer-ready reply.`;
     console.error("Failed to polish reply:", error);
     return res.status(500).json({
       error: error?.message || "Failed to polish reply",
+    });
+  }
+}
+
+export async function summarizeTicket(req: any, res: any) {
+  const { ticketId } = req.body;
+
+  if (!ticketId) {
+    return res.status(400).json({ error: "Ticket ID is required" });
+  }
+
+  // Read the key fresh on every request so dev reloads pick up changes.
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  if (!apiKey) {
+    console.error("summarizeTicket: GEMINI_API_KEY is not set on the server");
+    return res.status(500).json({
+      error:
+        "Ticket summarization is not available right now. The Gemini API key is not configured on the server. Please contact your administrator.",
+    });
+  }
+
+  try {
+    // Fetch the ticket with all relevant data
+    const ticket = await prisma.ticket.findUnique({
+      where: { id: ticketId },
+      include: {
+        user_Ticket_reporterIdTouser: {
+          select: { name: true, email: true }
+        },
+        user_Ticket_assigneeIdTouser: {
+          select: { name: true, email: true }
+        }
+      }
+    });
+
+    if (!ticket) {
+      return res.status(404).json({ error: "Ticket not found" });
+    }
+
+    // Fetch replies for this ticket
+    const replies = await prisma.reply.findMany({
+      where: { ticketId: ticketId },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        author: {
+          select: { name: true, email: true }
+        }
+      }
+    });
+
+    // Prepare the ticket information for summarization
+    const ticketInfo = `
+TICKET INFORMATION:
+- Ticket ID: ${ticket.id}
+- Title: ${ticket.title}
+- Description: ${ticket.description || 'No description provided'}
+- Status: ${ticket.status}
+- Priority: ${ticket.priority}
+- Category: ${ticket.category || 'Not categorized'}
+- Reporter: ${ticket.user_Ticket_reporterIdTouser?.name || 'Unknown'} (${ticket.user_Ticket_reporterIdTouser?.email || 'no-email'})
+- Assignee: ${ticket.user_Ticket_assigneeIdTouser?.name || 'Unassigned'} (${ticket.user_Ticket_assigneeIdTouser?.email || 'no-email'})
+- Created: ${new Date(ticket.createdAt).toLocaleString()}
+- Updated: ${ticket.updatedAt ? new Date(ticket.updatedAt).toLocaleString() : 'Not updated'}
+`.trim();
+
+    // Prepare the conversation history for summarization
+    const conversationHistory = replies.length > 0
+      ? `
+CONVERSATION HISTORY:
+${replies.map((reply, index) => `
+  ${index + 1}. ${reply.author?.name || 'Unknown'} (${reply.author?.email || 'no-email'}) [${new Date(reply.createdAt).toLocaleString()}]:
+    ${reply.body}
+`).join('\n')}
+`.trim()
+      : "CONVERSATION HISTORY:\nNo replies yet.";
+
+    const prompt = `You are an AI assistant specialized in summarizing help desk tickets and conversations. Your task is to create a concise, informative summary that captures the key points of the ticket and the entire conversation history.
+
+${ticketInfo}
+
+${conversationHistory}
+
+INSTRUCTIONS:
+1. Create a clear, concise summary of the ticket and conversation
+2. Include the key information: ticket title, description, status, priority, category
+3. Summarize the conversation flow - what was discussed, what solutions were proposed, what was decided
+4. Highlight any important decisions, action items, or unresolved issues
+5. Keep the summary professional and easy to understand
+6. Focus on the most important information - don't include every minor detail
+7. If there are no replies, summarize just the ticket information
+8. The summary should be 2-4 paragraphs maximum
+
+FORMAT:
+- Provide only the summary text
+- Do not include any preamble like "Here is the summary:" or explanations
+- Do not use bullet points unless they help clarity
+- Do not include any meta-commentary about the summarization process
+
+Return ONLY the summary.`;
+
+    const response = await fetch(`${GEMINI_ENDPOINT}?key=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [{ text: prompt }],
+          },
+        ],
+        generationConfig: {
+          maxOutputTokens: 4096,
+          temperature: 0.3,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      let geminiErrorMessage = `Gemini API returned HTTP ${response.status}`;
+      try {
+        const errorBody = (await response.json()) as GeminiErrorResponse;
+        geminiErrorMessage = errorBody?.error?.message || geminiErrorMessage;
+      } catch {
+        // Keep the default HTTP status message.
+      }
+      console.error("Gemini API error:", response.status, geminiErrorMessage);
+      return res
+        .status(500)
+        .json({ error: `Failed to generate summary: ${geminiErrorMessage}` });
+    }
+
+    const data = (await response.json()) as GeminiErrorResponse;
+    const candidate = data?.candidates?.[0];
+    const summaryText = candidate?.content?.parts?.[0]?.text ?? "";
+    const finishReason = candidate?.finishReason;
+
+    if (!summaryText) {
+      console.error("Gemini API returned an empty response");
+      return res.status(500).json({
+        error: "Failed to generate summary: the Gemini API returned an empty response.",
+      });
+    }
+
+    // If the response was truncated or blocked, do NOT return it as a
+    // successful summary. The client must never receive an incomplete summary.
+    if (finishReason && INCOMPLETE_FINISH_REASONS.has(finishReason)) {
+      console.error(
+        `summarizeTicket: Gemini response was incomplete (finishReason=${finishReason}). Not returning it as successful.`
+      );
+      const errorMessage = finishReason === "MAX_TOKENS"
+        ? "Failed to generate summary: the response was too long and was truncated. Please try again with a shorter ticket or conversation."
+        : "Failed to generate summary: the response was blocked or incomplete. Please try again";
+      return res.status(500).json({ error: errorMessage });
+    }
+
+    res.json({ summary: summaryText.trim() });
+  } catch (error: any) {
+    console.error("Failed to generate summary:", error);
+    return res.status(500).json({
+      error: error?.message || "Failed to generate summary",
     });
   }
 }
