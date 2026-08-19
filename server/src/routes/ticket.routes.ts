@@ -15,6 +15,7 @@ import { asyncHandler } from "../utils/asyncHandler";
 const router = Router();
 
 // GET all tickets (with optional filtering)
+// By default, excludes AI-resolved tickets from knowledge base
 router.get("/", asyncHandler(getTickets));
 
 // GET single ticket by ID

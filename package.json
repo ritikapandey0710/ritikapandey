@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
+    "axios": "^1.19.0",
     "lucide-react": "^1.28.0",
     "pg-boss": "^12.27.0",
     "react-hook-form": "^7.82.0",

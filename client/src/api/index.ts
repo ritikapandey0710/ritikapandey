@@ -48,7 +48,7 @@ export async function fetchTickets(params?: TicketFetchParams) {
 }
 
 export async function createTicket(ticketData: {
-  subject: string;
+  title: string;
   body?: string;
   status?: string;
   category?: string;
@@ -58,8 +58,12 @@ export async function createTicket(ticketData: {
 }) {
   const url = `/tickets`;
 
+  // Map client `body` field to server `description` field
+  const { body, ...rest } = ticketData;
+  const payload: any = { ...rest, description: body };
+
   try {
-    const response = await api.post(url, ticketData, {
+    const response = await api.post(url, payload, {
       headers: { "Content-Type": "application/json" },
     });
     return response.data;
@@ -78,8 +82,13 @@ export async function updateTicket(id: string, ticketData: Partial<{
 }>) {
   const url = `/tickets/${id}`;
 
+  // Map client `body` field to server `description` field
+  const { body, ...rest } = ticketData;
+  const payload: any = { ...rest };
+  if (body !== undefined) payload.description = body;
+
   try {
-    const response = await api.patch(url, ticketData, {
+    const response = await api.patch(url, payload, {
       headers: {
         "Content-Type": "application/json",
       },

@@ -122,7 +122,7 @@ export const TicketDetail: React.FC<TicketDetailProps> = ({
 
       <div className="mb-6">
         <h3 className="text-lg font-semibold text-slate-900 mb-2">Description</h3>
-        <p className="text-slate-700 whitespace-pre-line">{ticket.body || 'No description provided'}</p>
+        <p className="text-slate-700 whitespace-pre-line">{ticket.description || 'No description provided'}</p>
       </div>
 
       <div className="mb-6">

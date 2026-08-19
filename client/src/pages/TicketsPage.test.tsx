@@ -29,7 +29,7 @@ const mockTickets = [
     id: 'ticket-1',
     ticketNumber: 1,
     title: 'Login issue',
-    body: 'Cannot log in',
+    description: 'Cannot log in',
     senderName: 'Alice',
     senderEmail: 'alice@example.com',
     status: 'OPEN',
@@ -43,7 +43,7 @@ const mockTickets = [
     id: 'ticket-2',
     ticketNumber: 2,
     title: 'Refund request',
-    body: null,
+    description: null,
     senderName: 'Bob',
     senderEmail: 'bob@example.com',
     status: 'RESOLVED',
@@ -200,7 +200,7 @@ describe('TicketsPage', () => {
       await screen.findByText('No tickets yet');
       fireEvent.click(screen.getByRole('button', { name: /new ticket/i }));
       fireEvent.click(screen.getByRole('button', { name: /create ticket/i }));
-      await screen.findByText('Subject must be at least 3 characters');
+      await screen.findByText('Title must be at least 3 characters');
       expect(screen.getByText('Sender name is required')).toBeInTheDocument();
       expect(screen.getByText('Invalid email address')).toBeInTheDocument();
     });
@@ -221,7 +221,7 @@ describe('TicketsPage', () => {
 
       await waitFor(() => {
         expect(createTicket).toHaveBeenCalledWith(expect.objectContaining({
-          subject: 'My subject',
+          title: 'My subject',
           senderName: 'Jane',
           senderEmail: 'jane@example.com',
         }));

@@ -126,6 +126,8 @@ enum Role {
 }
 
 enum TicketStatus {
+  NEW
+  PROCESSING
   OPEN
   IN_PROGRESS
   RESOLVED

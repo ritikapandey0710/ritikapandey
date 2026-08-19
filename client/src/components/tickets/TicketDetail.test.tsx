@@ -22,7 +22,7 @@ const mockTicket = {
   senderName: 'John Doe',
   senderEmail: 'john@example.com',
   assigneeId: 'agent-1',
-  body: 'This is a test ticket description.',
+  description: 'This is a test ticket description.',
   createdAt: '2026-08-14T10:00:00Z',
   updatedAt: '2026-08-14T11:00:00Z',
 };
@@ -272,10 +272,10 @@ describe('TicketDetail', () => {
     });
   });
 
-  it('shows "No description provided" when body is empty', () => {
+    it('shows "No description provided" when body is empty', () => {
     const ticketWithoutBody = {
       ...mockTicket,
-      body: '',
+      description: '',
     };
 
     renderWithQuery(<TicketDetail ticket={ticketWithoutBody} agents={mockAgents} />);
@@ -286,7 +286,7 @@ describe('TicketDetail', () => {
   it('shows "No description provided" when body is null', () => {
     const ticketWithoutBody = {
       ...mockTicket,
-      body: null,
+      description: null,
     };
 
     renderWithQuery(<TicketDetail ticket={ticketWithoutBody} agents={mockAgents} />);

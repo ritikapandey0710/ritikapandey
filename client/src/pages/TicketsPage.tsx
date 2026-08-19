@@ -44,7 +44,7 @@ const PRIORITY_LABELS: Record<TicketPriority, { label: string; color: string }> 
 };
 
 const createTicketSchema = z.object({
-  subject: z.string().trim().min(3, 'Subject must be at least 3 characters'),
+  title: z.string().trim().min(3, 'Title must be at least 3 characters'),
   body: z.string().trim().optional(),
   senderName: z.string().trim().min(1, 'Sender name is required'),
   senderEmail: z.string().email('Invalid email address'),
@@ -59,7 +59,7 @@ function CreateTicketModal({ isOpen, onClose, onSuccess }: {
 }) {
   const { register, handleSubmit, formState: { errors, isSubmitting }, reset } = useForm({
     resolver: zodResolver(createTicketSchema),
-    defaultValues: { subject: '', body: '', senderName: '', senderEmail: '', category: undefined, status: 'OPEN' as TicketStatus },
+    defaultValues: { title: '', body: '', senderName: '', senderEmail: '', category: undefined, status: 'OPEN' as TicketStatus },
   });
   const [apiError, setApiError] = useState('');
 
@@ -96,13 +96,13 @@ function CreateTicketModal({ isOpen, onClose, onSuccess }: {
           )}
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">Subject</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">Title</label>
             <input
-              {...register('subject')}
+              {...register('title')}
               placeholder="Describe the issue briefly"
-              className="w-full px-3.5 py-2.5 text-sm rounded-xl border bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition ${errors.subject ? 'border-red-300' : 'border-slate-200'}"
+              className="w-full px-3.5 py-2.5 text-sm rounded-xl border bg-slate-50 text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent focus:bg-white transition ${errors.title ? 'border-red-300' : 'border-slate-200'}"
             />
-            {errors.subject && <p className="mt-1 text-xs text-red-600">{errors.subject.message}</p>}
+            {errors.title && <p className="mt-1 text-xs text-red-600">{errors.title.message}</p>}
           </div>
 
           <div>

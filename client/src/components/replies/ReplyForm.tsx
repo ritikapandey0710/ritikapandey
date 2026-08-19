@@ -59,14 +59,47 @@ export const ReplyForm: React.FC<ReplyFormProps> = ({
       // reach this state through normal user interaction. Guard anyway.
       return;
     }
+
     try {
-      await onSubmit(replyBody);
+      // Format the reply to address customer by first name and ensure professional tone
+      const formattedReply = formatReplyForCustomer(replyBody, customerName);
+      await onSubmit(formattedReply);
       // Only clear the form after successful submission
       setReplyBody('');
     } catch (err) {
       // Keep the typed text on error - the parent handles error display
       // Do not clear the textarea
     }
+  };
+
+  // Formats reply to address customer by first name and ensure professional tone
+  const formatReplyForCustomer = (body: string, customerName: string | undefined): string => {
+    // Trim the body
+    let formattedBody = body.trim();
+
+    // If we have a customer name, address them by first name
+    if (customerName) {
+      // Extract first name (assuming format like "John Doe" or just "John")
+      const firstName = customerName.split(' ')[0];
+
+      // Check if the body already starts with a greeting to the customer
+      const lowerBody = formattedBody.toLowerCase();
+      const greetingPatterns = [
+        `hi ${firstName.toLowerCase()},`,
+        `hello ${firstName.toLowerCase()},`,
+        `hey ${firstName.toLowerCase()},`,
+        `dear ${firstName.toLowerCase()},`
+      ];
+
+      const alreadyHasGreeting = greetingPatterns.some(pattern => lowerBody.startsWith(pattern));
+
+      // If it doesn't already have a greeting, prepend one
+      if (!alreadyHasGreeting && firstName) {
+        formattedBody = `Hi ${firstName}, ${formattedBody}`;
+      }
+    }
+
+    return formattedBody;
   };
 
   return (

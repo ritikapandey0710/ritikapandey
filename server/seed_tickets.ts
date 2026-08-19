@@ -23,7 +23,7 @@ async function main() {
     process.exit(1);
   }
 
-  const statuses = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'];
+  const statuses = ['NEW', 'PROCESSING', 'OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'];
   const priorities = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
   const categories = ['GENERAL_QUESTION', 'TECHNICAL_QUESTION', 'REFUND_REQUEST'];
 

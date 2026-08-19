@@ -352,7 +352,7 @@ export default function TicketDetailsPage() {
                     Description
                   </h3>
                   <p className="text-slate-700 whitespace-pre-line">
-                    {ticket.body || 'No description provided'}
+                    {ticket.description || 'No description provided'}
                   </p>
                 </div>
 

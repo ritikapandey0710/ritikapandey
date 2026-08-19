@@ -112,12 +112,15 @@ describe('ReplyForm', () => {
     const isSubmitting = false;
     const submitError = null;
     const submitSuccess = false;
+    const customerName = 'John Doe';
 
     renderWithQuery(<ReplyForm
       onSubmit={mockOnSubmit}
       isSubmitting={isSubmitting}
       submitError={submitError}
       submitSuccess={submitSuccess}
+      ticketId="test-id"
+      customerName={customerName}
     />);
 
     // Type in the textarea (accounting for userEvent.type duplication issue)
@@ -130,7 +133,8 @@ describe('ReplyForm', () => {
 
     // Wait for submit to complete (mock resolves immediately)
     await vi.waitFor(() => {
-      expect(mockOnSubmit).toHaveBeenCalledWith('TTeesstt  rreeppllyy');
+      // Expect that the formatted reply (with customer name) was submitted
+      expect(mockOnSubmit).toHaveBeenCalledWith('Hi John, TTeesstt  rreeppllyy');
     });
 
     // After successful submission, form should be cleared
@@ -142,12 +146,15 @@ describe('ReplyForm', () => {
     const isSubmitting = false;
     const submitError = null;
     const submitSuccess = false;
+    const customerName = 'John Doe';
 
     renderWithQuery(<ReplyForm
       onSubmit={mockOnSubmit}
       isSubmitting={isSubmitting}
       submitError={submitError}
       submitSuccess={submitSuccess}
+      ticketId="test-id"
+      customerName={customerName}
     />);
 
     // Type in the textarea (accounting for userEvent.type duplication issue)
@@ -161,7 +168,8 @@ describe('ReplyForm', () => {
 
     // Wait for submit to complete (mock rejects)
     await vi.waitFor(() => {
-      expect(mockOnSubmit).toHaveBeenCalledWith(originalText);
+      // Expect that the formatted reply (with customer name) was attempted to be submitted
+      expect(mockOnSubmit).toHaveBeenCalledWith('Hi John, TTeesstt  rreeppllyy');
     });
 
     // Text should be preserved in textarea after failed submission

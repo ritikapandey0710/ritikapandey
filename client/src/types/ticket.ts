@@ -35,7 +35,7 @@ export interface Ticket {
   id: string;
   ticketNumber?: string | null;
   title: string;
-  body: string | null;
+  description: string | null;
   senderName: string;
   senderEmail: string;
   status: TicketStatus;

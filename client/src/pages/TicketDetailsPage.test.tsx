@@ -55,7 +55,7 @@ describe('TicketDetailsPage', () => {
     senderName: 'John Doe',
     senderEmail: 'john@example.com',
     assigneeId: 'agent-1',
-    body: 'Test description',
+    description: 'Test description',
     createdAt: '2026-08-14T10:00:00Z',
     updatedAt: '2026-08-14T11:00:00Z',
   };
