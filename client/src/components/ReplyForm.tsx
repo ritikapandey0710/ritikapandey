@@ -32,6 +32,11 @@ export const ReplyForm: React.FC<ReplyFormProps> = ({
     setPolishError(null);
 
     try {
+      // Validate required parameters
+      if (!ticketId) {
+        throw new Error('Ticket ID is required for polishing replies');
+      }
+
       // Call the server-side AI polish endpoint with agent, customer, and subject info
       const result = await polishReply(replyBody, ticketId, customerName, subject);
 
@@ -107,7 +112,7 @@ export const ReplyForm: React.FC<ReplyFormProps> = ({
           type="submit"
           disabled={isSubmitting || isReplyEmpty}
           className={`px-4 py-2 text-sm font-semibold text-white bg-violet-600 hover:bg-violet-700 rounded-xl transition shadow-sm shadow-violet-200 ${
-            isSubmitting || isReplyEmpty ? 'bg-violet-500' : 'hover:bg-violet-700'
+            isSubmitting || isReplyEmpty ? 'bg-violet-500' : 'hover-bg-violet-700'
           }`}
         >
           {isSubmitting ? 'Sending...' : 'Send Reply'}

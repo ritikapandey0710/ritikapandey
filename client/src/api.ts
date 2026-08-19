@@ -160,6 +160,13 @@ export async function polishReply(text: string, ticketId?: string, customerName?
       );
     }
 
+    // Check if this is a Gemini quota exceeded error from the AI service
+    if (error.response?.data?.error?.includes("You exceeded your current quota")) {
+      throw new Error(
+        "Gemini API quota exceeded. Please try again later or contact support if this persists."
+      );
+    }
+
     throw new Error(
       error.response?.data?.error ||
       `Failed to polish reply: ${error.response?.status || 'Unknown error'}`
@@ -177,7 +184,26 @@ export async function summarizeTicket(ticketId: string) {
     return response.data;
   } catch (error: any) {
     console.error("Error summarizing ticket:", error);
-    throw new Error(`Failed to summarize ticket: ${error.response?.data?.error || error.response?.status || 'Unknown error'}`);
+
+    // Detect HTTP 429 (rate limit / quota exceeded) from the express-rate-limit middleware
+    if (error.response?.status === 429) {
+      throw new Error(
+        "You've reached the request limit for ticket summarization. " +
+        "Please wait a moment and try again later."
+      );
+    }
+
+    // Check if this is a Gemini quota exceeded error from the AI service
+    if (error.response?.data?.error?.includes("You exceeded your current quota")) {
+      throw new Error(
+        "Gemini API quota exceeded. Please try again later or contact support if this persists."
+      );
+    }
+
+    throw new Error(
+      error.response?.data?.error ||
+      `Failed to summarize ticket: ${error.response?.status || 'Unknown error'}`
+    );
   }
 }
 

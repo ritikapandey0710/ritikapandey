@@ -309,6 +309,14 @@ Return ONLY the summary.`;
         // Keep the default HTTP status message.
       }
       console.error("Gemini API error:", response.status, geminiErrorMessage);
+
+      // Return HTTP 429 for Gemini quota/rate-limit errors
+      if (geminiErrorMessage.includes("You exceeded your current quota")) {
+        return res
+          .status(429)
+          .json({ error: `Failed to generate summary: ${geminiErrorMessage}` });
+      }
+
       return res
         .status(500)
         .json({ error: `Failed to generate summary: ${geminiErrorMessage}` });
