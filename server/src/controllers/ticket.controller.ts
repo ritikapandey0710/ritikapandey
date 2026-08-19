@@ -117,6 +117,28 @@ export async function createTicket(req: any, res: any) {
     },
   });
 
+  // Fire off AI classification in the background (do not await)
+// Import the classifyTicket function from ai.controller
+  const { classifyTicket } = await import('./ai.controller');
+  classifyTicket(title, description)
+    .then(({ category, priority }) => {
+      // Update the ticket with the classified category and priority
+      // Need to cast to proper types for Prisma
+      return prisma.ticket.update({
+        where: { id: ticket.id },
+        data: {
+          category: category as any,
+          priority: priority as any
+        },
+      });
+    })
+    .then(() => {
+      console.log(`AI classification completed for ticket ${ticket.id}`);
+    })
+    .catch((error) => {
+      console.error(`AI classification failed for ticket ${ticket.id}`, error);
+    });
+
   res.json(ticket);
 }
 

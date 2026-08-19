@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma';
 
 // Reply Form "Polish" feature using the Google Gemini API (free tier).
+// Ticket classification feature using the Google Gemini API (free tier).
 //
 // IMPORTANT: The Gemini API key is read from the server environment variable
 // `GEMINI_API_KEY` and is used ONLY on the server when calling Google's
@@ -352,5 +353,87 @@ Return ONLY the summary.`;
     return res.status(500).json({
       error: error?.message || "Failed to generate summary",
     });
+  }
+}
+
+// Helper function to classify a ticket using Gemini
+export async function classifyTicket(title: string, description: string | null): Promise<{ category: string; priority: string }> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY is not set");
+  }
+
+  const prompt = `Classify the following ticket into one of the categories: GENERAL_QUESTION, TECHNICAL_QUESTION, REFUND_REQUEST
+and one of the priorities: LOW, MEDIUM, HIGH, URGENT.
+
+Ticket Title: ${title}
+Ticket Description: ${description || "(No description provided)"}
+
+Return only a JSON object in the format: { "category": "...", "priority": "..." }
+If you are unsure, use the default values: category: "GENERAL_QUESTION", priority: "MEDIUM".`;
+
+  try {
+    const response = await fetch(`${GEMINI_ENDPOINT}?key=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [{ text: prompt }],
+          },
+        ],
+        generationConfig: {
+          maxOutputTokens: 1024, // We don't need many tokens for classification
+          temperature: 0.1, // Low temperature for more deterministic output
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      let geminiErrorMessage = `Gemini API returned HTTP ${response.status}`;
+      try {
+        const errorBody = (await response.json()) as GeminiErrorResponse;
+        geminiErrorMessage = errorBody?.error?.message || geminiErrorMessage;
+      } catch {
+        // Keep the default HTTP status message.
+      }
+      throw new Error(`Gemini API error: ${geminiErrorMessage}`);
+    }
+
+    const data = (await response.json()) as GeminiErrorResponse;
+    const candidate = data?.candidates?.[0];
+    const text = candidate?.content?.parts?.[0]?.text ?? "";
+
+    if (!text) {
+      throw new Error("Gemini API returned an empty response");
+    }
+
+    // Try to parse the JSON response
+    let parsed: { category?: string; priority?: string } = {};
+    try {
+      parsed = JSON.parse(text.trim());
+    } catch (e) {
+      console.error("Failed to parse Gemini classification response as JSON:", text);
+      throw new Error("Invalid JSON response from Gemini");
+    }
+
+    // Validate category and priority against allowed values
+    const validCategories = ["GENERAL_QUESTION", "TECHNICAL_QUESTION", "REFUND_REQUEST"];
+    const validPriorities = ["LOW", "MEDIUM", "HIGH", "URGENT"];
+
+    let category: string = "GENERAL_QUESTION";
+    let priority: string = "MEDIUM";
+    if (parsed.category && validCategories.includes(parsed.category)) {
+      category = parsed.category;
+    }
+    if (parsed.priority && validPriorities.includes(parsed.priority)) {
+      priority = parsed.priority;
+    }
+
+    return { category, priority };
+  } catch (error: any) {
+    console.error("Error in classifyTicket:", error);
+    // Re-throw so the caller can handle it (we'll log and not update the ticket)
+    throw error;
   }
 }

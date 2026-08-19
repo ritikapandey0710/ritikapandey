@@ -8,6 +8,7 @@ import { auth } from "./lib/auth";
 import ticketRouter from "./routes/ticket.routes";
 import userRouter from "./routes/user.routes";
 import aiRouter from "./routes/ai.routes";
+import webhookRouter from "./routes/webhooks";
 import { EmailService } from "./services/email.service";
 
 console.log("Server starting..."); // Debug line
@@ -83,6 +84,9 @@ app.use("/api/tickets", async (req: Request, res: Response, next: NextFunction) 
 });
 
 app.use("/api/tickets", ticketRouter);
+
+// Webhook routes (no authentication required for external systems)
+app.use("/api/webhooks", webhookRouter);
 
 // User routes (admin only)
 app.use("/api/users", userRouter);
