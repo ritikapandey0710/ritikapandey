@@ -1,9 +1,0 @@
-curl.exe : curl: (28) Operation timed out after 20007 milliseconds with 0 bytes received
-At line:1 char:1
-+ curl.exe -s -S -X POST http://localhost:3006/api/ai/polish -H 'Conten ...
-+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    + CategoryInfo          : NotSpecified: (curl: (28) Oper... bytes received:String) [], RemoteException
-    + FullyQualifiedErrorId : NativeCommandError
- 
-
-HTTP_STATUS:000

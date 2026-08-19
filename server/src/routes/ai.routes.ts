@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { polishReply, summarizeTicket } from "./ai.controller";
-import { asyncHandler } from "./utils/asyncHandler";
+import { polishReply, summarizeTicket } from "../controllers/ai.controller";
+import { asyncHandler } from "../utils/asyncHandler";
 
 const router = Router();
 

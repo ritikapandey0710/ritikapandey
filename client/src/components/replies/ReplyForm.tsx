@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { ErrorMessage } from './ErrorMessage';
-import { polishReply } from '../api';
+import { ErrorMessage } from '../common/ErrorMessage';
+import { polishReply } from '../../api';
 
 interface ReplyFormProps {
   onSubmit: (replyBody: string) => Promise<void>;

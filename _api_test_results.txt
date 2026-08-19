@@ -1,4 +1,0 @@
-Port3001_test: STATUS=200 BODY={"message":"Test endpoint working"}
-Port3001_polish: STATUS=200 BODY={"polished":"Hi Test,\n\nI am currently looking into your issue and will get back to you with an update shortly.\n\nBest regards,\nSupport Team"}
-Port3005_test: ERROR=Unable to connect. Is the computer able to access the url?
-Port3005_polish: ERROR=Unable to connect. Is the computer able to access the url?

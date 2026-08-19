@@ -1,12 +1,12 @@
 import { Router } from "express";
-import { prisma } from "../../prisma";
-import { authenticate, authenticateAndAuthorizeAdmin } from "../../middleware/auth.middleware";
-import { asyncHandler } from "../../utils/asyncHandler";
-import { auth } from "../../auth";
+import { prisma } from "../lib/prisma";
+import { authenticate, authenticateAndAuthorizeAdmin } from "../middleware/auth.middleware";
+import { asyncHandler } from "../utils/asyncHandler";
+import { auth } from "../lib/auth";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
-import { Role } from "../../types/role";
-import { handleZodError } from "../../utils/validation";
+import { Role } from "../types/role";
+import { handleZodError } from "../utils/validation";
 
 const router = Router();
 

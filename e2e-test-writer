@@ -1,4 +1,0 @@
-### Testing
-- Unit tests: Jest/Vitest
-- E2E tests: Playwright or Cypress (to be added)
-- Run tests with `bun test` (configured in each workspace).

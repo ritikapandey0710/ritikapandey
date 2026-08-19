@@ -1,4 +1,4 @@
-import { prisma } from "./prisma";
+import { prisma } from "../lib/prisma";
 
 export async function getTickets(req: any, res: any) {
   const { search, status, category, senderName, assigneeId, priority, sortBy, sortOrder } = req.query;

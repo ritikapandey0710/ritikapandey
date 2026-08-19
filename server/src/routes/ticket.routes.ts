@@ -5,12 +5,12 @@ import {
   createTicket,
   updateTicket,
   deleteTicket
-} from "./ticket.controller";
+} from "../controllers/ticket.controller";
 import {
   createReply,
   getRepliesByTicketId
-} from "./reply.controller";
-import { asyncHandler } from "./utils/asyncHandler";
+} from "../controllers/reply.controller";
+import { asyncHandler } from "../utils/asyncHandler";
 
 const router = Router();
 

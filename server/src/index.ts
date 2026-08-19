@@ -4,10 +4,10 @@ import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
 import { toNodeHandler } from "better-auth/node";
-import { auth } from "./auth";
-import ticketRouter from "./ticket.router";
-import userRouter from "./modules/user/user.router";
-import aiRouter from "./ai.router";
+import { auth } from "./lib/auth";
+import ticketRouter from "./routes/ticket.routes";
+import userRouter from "./routes/user.routes";
+import aiRouter from "./routes/ai.routes";
 import { EmailService } from "./services/email.service";
 
 console.log("Server starting..."); // Debug line

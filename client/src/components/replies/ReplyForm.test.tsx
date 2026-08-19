@@ -1,5 +1,5 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
-import { renderWithQuery } from '../test/render-utils';
+import { renderWithQuery } from '../../test/render-utils';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ReplyForm } from './ReplyForm';

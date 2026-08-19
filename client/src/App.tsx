@@ -1,6 +1,6 @@
 import { authClient } from "./lib/auth-client";
 import { Routes, Route, Navigate } from 'react-router-dom';
-import Layout from './components/Layout';
+import Layout from './components/layout/Layout';
 import HomePage from './pages/HomePage';
 import TicketsPage from './pages/TicketsPage';
 import TicketDetailsPage from './pages/TicketDetailsPage';

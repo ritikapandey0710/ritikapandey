@@ -1,2 +1,0 @@
-{"polished":"Hello John,\n\nI am currently in the process of resetting your password and will follow up"}
-HTTP_STATUS:200

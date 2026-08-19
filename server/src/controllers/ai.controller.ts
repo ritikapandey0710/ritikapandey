@@ -1,4 +1,4 @@
-import { prisma } from './prisma';
+import { prisma } from '../lib/prisma';
 
 // Reply Form "Polish" feature using the Google Gemini API (free tier).
 //
@@ -253,7 +253,7 @@ TICKET INFORMATION:
     const conversationHistory = replies.length > 0
       ? `
 CONVERSATION HISTORY:
-${replies.map((reply, index) => `
+${replies.map((reply: any, index: number) => `
   ${index + 1}. ${reply.author?.name || 'Unknown'} (${reply.author?.email || 'no-email'}) [${new Date(reply.createdAt).toLocaleString()}]:
     ${reply.body}
 `).join('\n')}

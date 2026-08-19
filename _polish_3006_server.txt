@@ -1,7 +1,0 @@
-DEBUG: index.ts loaded
-Server starting...
-Mounting auth middleware at /api/auth
-Email service not started. Missing environment variables: EMAIL_IMAP_HOST, EMAIL_IMAP_USER, EMAIL_IMAP_PASS
-To enable email processing, please configure IMAP settings in .env file
-Server running at http://localhost:3006
-[2026-08-17T12:13:00.756Z] POST /api/ai/polish

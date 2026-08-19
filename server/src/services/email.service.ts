@@ -1,6 +1,6 @@
 import { simpleParser } from 'mailparser';
 import IMAP = require('imap-simple');
-import { prisma } from '../prisma';
+import { prisma } from '../lib/prisma';
 import nodemailer from 'nodemailer';
 
 interface EmailOptions {

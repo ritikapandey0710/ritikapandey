@@ -6,8 +6,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import type { AuthUser } from '@/types/user';
-import { UserTable } from '../components/UserTable';
-import { DeleteUserModal } from '../components/DeleteUserModal';
+import { UserTable } from '../components/users/UserTable';
+import { DeleteUserModal } from '../components/users/DeleteUserModal';
 
 function UserModal({
   isOpen,

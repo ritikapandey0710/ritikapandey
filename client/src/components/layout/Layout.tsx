@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { authClient } from '../lib/auth-client';
-import type { AuthUser } from '../types/user';
-import { UserRole } from '../types/role';
+import { authClient } from '../../lib/auth-client';
+import type { AuthUser } from '../../types/user';
+import { UserRole } from '../../types/role';
 import {
   Home,
   Ticket,

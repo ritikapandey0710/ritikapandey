@@ -19,9 +19,9 @@ import {
   getStatusLabel,
   getCategoryLabel,
 } from '@/utils/ticketUtils';
-import UpdateTicket from '../components/UpdateTicket';
-import { ReplyThread } from '../components/ReplyThread';
-import { ReplyForm } from '../components/ReplyForm';
+import UpdateTicket from '../components/tickets/UpdateTicket';
+import { ReplyThread } from '../components/replies/ReplyThread';
+import { ReplyForm } from '../components/replies/ReplyForm';
 import { ChevronLeft, Sparkles } from 'lucide-react';
 
 // Local category badge color classes (preserved for test compatibility)
