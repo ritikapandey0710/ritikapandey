@@ -19,7 +19,7 @@ model User {
   deletedAt                      DateTime?
   Ticket_Ticket_assigneeIdTouser Ticket[]  @relation("Ticket_assigneeIdTouser")
   Ticket_Ticket_reporterIdTouser Ticket[]  @relation("Ticket_reporterIdTouser")
-  TicketReply_authorIdToReply    Reply[]  @relation("TicketReply_authorIdToReply")
+  TicketReply_authorIdToReply    Reply[]   @relation("TicketReply_authorIdToReply")
   accounts                       Account[]
   sessions                       Session[]
 
@@ -87,6 +87,8 @@ model Ticket {
   reporterId                   String?
   createdAt                    DateTime       @default(now())
   updatedAt                    DateTime       @updatedAt
+  resolvedAt                   DateTime?
+  resolvedByAI                 Boolean        @default(false)
   user_Ticket_assigneeIdTouser User?          @relation("Ticket_assigneeIdTouser", fields: [assigneeId], references: [id])
   user_Ticket_reporterIdTouser User?          @relation("Ticket_reporterIdTouser", fields: [reporterId], references: [id])
   replies                      Reply[]        @relation("TicketReplies")
@@ -95,6 +97,8 @@ model Ticket {
   @@index([priority])
   @@index([reporterId])
   @@index([status])
+  @@index([resolvedByAI])
+  @@index([resolvedAt])
   @@map("Ticket")
 }
 

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { prisma } from "../lib/prisma";
 import { asyncHandler } from "../utils/asyncHandler";
 import { knowledgeBaseService } from "../services/knowledgeBaseService";
+import { getOrCreateAIAgent } from "../services/aiAgentService";
 
 const router = Router();
 
@@ -38,7 +39,16 @@ router.post("/tickets", asyncHandler(async (req, res) => {
   // Get the current user from the request (set by auth middleware if applicable)
   const userId = (req as any).user?.id;
 
-  // Create ticket with initial status NEW
+  // Find or create the AI agent to assign this ticket to
+  let aiAgentId: string | null = null;
+  try {
+    const aiAgent = await getOrCreateAIAgent();
+    aiAgentId = aiAgent.id;
+  } catch (aiAgentError) {
+    console.error(`Failed to get/create AI agent for webhook ticket:`, aiAgentError);
+  }
+
+  // Create ticket with initial status NEW, assigned to AI agent
   const ticket = await prisma.ticket.create({
     data: {
       title,
@@ -48,7 +58,7 @@ router.post("/tickets", asyncHandler(async (req, res) => {
       category: category || null, // Optional, no default value
       senderName,
       senderEmail,
-      assigneeId: assigneeId || null, // Optional
+      assigneeId: aiAgentId || assigneeId || null, // Assign to AI agent first
       reporterId: userId || null, // Set to current user if available
     },
   });
@@ -63,11 +73,13 @@ router.post("/tickets", asyncHandler(async (req, res) => {
   try {
     const kbEntry = knowledgeBaseService.findMatchingEntry(title, description);
     if (kbEntry) {
-      // Auto-resolve the ticket
+      // Auto-resolve the ticket - keep assigned to AI, mark as AI-resolved
       await prisma.ticket.update({
         where: { id: ticket.id },
         data: {
           status: "RESOLVED",
+          resolvedByAI: true,
+          resolvedAt: new Date(),
         },
       });
 
@@ -108,19 +120,23 @@ router.post("/tickets", asyncHandler(async (req, res) => {
 
     // If no knowledge base match, ticket remains open for human handling
     // (AI tried via knowledge base but couldn't auto-resolve)
+    // Unassign from AI agent so a human agent can pick it up
     await prisma.ticket.update({
       where: { id: ticket.id },
       data: {
         status: "OPEN",
+        assigneeId: null, // Unassign from AI agent
       },
     });
   } catch (kbError) {
     console.error(`Knowledge base check failed for ticket ${ticket.id}:`, kbError);
     // Even if knowledge base check fails, mark as open for human handling
+    // and unassign from AI agent
     await prisma.ticket.update({
       where: { id: ticket.id },
       data: {
         status: "OPEN",
+        assigneeId: null, // Unassign from AI agent
       },
     });
   }
@@ -147,11 +163,14 @@ router.post("/tickets", asyncHandler(async (req, res) => {
       // Log the original AI text-generation error for debugging
       console.error(`AI classification failed for webhook ticket ${ticket.id}`, error);
       // If the AI text generation threw, do not leave the ticket stuck in its
-      // processing/AI state. Reset ONLY the status to OPEN (all other fields
-      // are left untouched) so it is visible to human agents.
+      // processing/AI state. Reset ONLY the status to OPEN and unassign from AI
+      // (all other fields are left untouched) so it is visible to human agents.
       prisma.ticket.update({
         where: { id: ticket.id },
-        data: { status: "OPEN" },
+        data: {
+          status: "OPEN",
+          assigneeId: null, // Unassign from AI agent
+        },
       }).catch((statusUpdateError) => {
         console.error(`Failed to reset webhook ticket ${ticket.id} status to OPEN after AI classification failure:`, statusUpdateError);
       });

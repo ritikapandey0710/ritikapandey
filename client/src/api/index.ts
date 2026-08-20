@@ -216,6 +216,27 @@ export async function summarizeTicket(ticketId: string) {
   }
 }
 
+export interface DashboardStats {
+  totalTickets: number;
+  openTickets: number;
+  aiResolvedTickets: number;
+  aiResolvedPercentage: number;
+  averageResolutionTime: number;
+  ticketsPerDay: { date: string; count: number }[];
+}
+
+export async function fetchDashboardStats() {
+  const url = `/dashboard`;
+
+  try {
+    const response = await api.get(url);
+    return response.data as DashboardStats;
+  } catch (error: any) {
+    console.error("Error fetching dashboard stats:", error);
+    throw new Error(`Failed to fetch dashboard stats: ${error.response?.status || 'Unknown error'}`);
+  }
+}
+
 // User management functions
 export async function fetchUsers() {
   const response = await api.get('/users', {

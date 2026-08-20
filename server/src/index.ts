@@ -9,6 +9,7 @@ import ticketRouter from "./routes/ticket.routes";
 import userRouter from "./routes/user.routes";
 import aiRouter from "./routes/ai.routes";
 import webhookRouter from "./routes/webhooks";
+import dashboardRouter from "./routes/dashboard.routes";
 import { EmailService } from "./services/email.service";
 
 console.log("Server starting..."); // Debug line
@@ -93,6 +94,22 @@ app.use("/api/users", userRouter);
 
 // AI routes (polish reply)
 app.use("/api/ai", aiRouter);
+
+// Dashboard routes (protected)
+app.use("/api/dashboard", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const session = await auth.api.getSession({ headers: req.headers });
+    if (!session) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    (req as any).user = session.user;
+    next();
+  } catch (error) {
+    console.error("Dashboard authentication error:", error);
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+});
+app.use("/api/dashboard", dashboardRouter);
 
 // 404 handler
 app.use((_req: Request, res: Response) => {
