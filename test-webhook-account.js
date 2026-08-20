@@ -1,4 +1,4 @@
-const axios = require('axios');
+const { signedPost } = require('./webhook-test-helper.cjs');
 
 // Test webhook endpoint for creating a ticket that should auto-resolve via knowledge base (account access issue)
 async function testWebhookAccountTicket() {
@@ -13,7 +13,7 @@ async function testWebhookAccountTicket() {
     };
 
     console.log('Testing webhook ticket creation with account access issue...');
-    const response = await axios.post('http://localhost:3001/api/webhooks/tickets', ticketData);
+    const response = await signedPost('http://localhost:3001/api/webhooks/tickets', ticketData);
     console.log('Response:', response.data);
     console.log('Ticket created successfully!');
 

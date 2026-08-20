@@ -1,4 +1,5 @@
 import { test, expect, request as playwrightRequest } from '@playwright/test';
+import crypto from "crypto";
 
 /**
  * End-to-End Test: Webhook Ticket Resolution Flow
@@ -73,20 +74,32 @@ test.describe('Webhook Ticket Resolution — Password Reset End-to-End', () => {
       // STEP 1 — Create ONE ticket through the EXISTING webhook
       // ══════════════════════════════════════════════════════════════════
       console.log('\n=== STEP 1: Create ticket via webhook ===');
+      // Sign the webhook payload with HMAC-SHA256 using the webhook secret.
+      // The body must be a pre-stringified JSON string so the signature matches
+      // the exact bytes the server receives (raw body captured by express.json
+      // verify callback).
+      const webhookPayload = JSON.stringify({
+        title: TICKET_TITLE,
+        description: TICKET_DESCRIPTION,
+        senderName: 'Test Customer',
+        senderEmail: CUSTOMER_EMAIL,
+        priority: 'MEDIUM',
+        // The category for this KB entry is GENERAL_QUESTION (see
+        // server/knowledge base.md "Password Reset Issues"). We pass it
+        // explicitly through the existing webhook for determinism rather
+        // than relying on the background Gemini classifyTicket call.
+        category: 'GENERAL_QUESTION',
+      });
+      const webhookSignature = crypto
+        .createHmac('sha256', process.env.WEBHOOK_SECRET!)
+        .update(webhookPayload)
+        .digest('hex');
       const webhookRes = await adminApi.post('/api/webhooks/tickets', {
-        data: {
-          title: TICKET_TITLE,
-          description: TICKET_DESCRIPTION,
-          senderName: 'Test Customer',
-          senderEmail: CUSTOMER_EMAIL,
-          priority: 'MEDIUM',
-          // The category for this KB entry is GENERAL_QUESTION (see
-          // server/knowledge base.md "Password Reset Issues"). We pass it
-          // explicitly through the existing webhook for determinism rather
-          // than relying on the background Gemini classifyTicket call.
-          category: 'GENERAL_QUESTION',
+        data: webhookPayload,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-webhook-signature': `sha256=${webhookSignature}`,
         },
-        headers: { 'Content-Type': 'application/json' },
       });
       expect(webhookRes.ok(), `Webhook call failed: ${webhookRes.status()}`).toBeTruthy();
       const createdTicket = await webhookRes.json();

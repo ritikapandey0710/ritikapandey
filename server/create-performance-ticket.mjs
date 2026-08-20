@@ -1,4 +1,8 @@
+import crypto from 'crypto';
+import 'dotenv/config';
+
 const API_URL = 'http://localhost:3001/api/webhooks/tickets';
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || '';
 
 const payload = {
   title: 'Performance Issues (Slow Website)',
@@ -12,10 +16,13 @@ const payload = {
   category: 'TECHNICAL_QUESTION',
 };
 
+const webhookBody = JSON.stringify(payload);
+const signature = 'sha256=' + crypto.createHmac('sha256', WEBHOOK_SECRET).update(webhookBody).digest('hex');
+
 const response = await fetch(API_URL, {
   method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(payload),
+  headers: { 'Content-Type': 'application/json', 'x-webhook-signature': signature },
+  body: webhookBody,
 });
 
 const body = await response.json();

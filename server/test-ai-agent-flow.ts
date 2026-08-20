@@ -1,8 +1,11 @@
+import "dotenv/config";
 import { PrismaClient } from "./src/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { computeWebhookSignature } from "./src/utils/webhookSigner";
 
 const DATABASE_URL = "postgresql://postgres:230023107062@localhost:5432/helpdesk?schema=public";
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: DATABASE_URL }) });
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || "";
 
 async function main() {
   // 1. Verify AI agent exists
@@ -24,10 +27,12 @@ async function main() {
   };
 
   console.log("\n--- Testing webhook with auto-resolvable ticket ---");
+  const webhookBody1 = JSON.stringify(testTicket);
+  const sig1 = computeWebhookSignature(webhookBody1, WEBHOOK_SECRET);
   const response = await fetch(webhookUrl, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(testTicket),
+    headers: { "Content-Type": "application/json", "x-webhook-signature": sig1 },
+    body: webhookBody1,
   });
 
   const result = await response.json();
@@ -62,10 +67,12 @@ async function main() {
   };
 
   console.log("\n--- Testing webhook with non-resolvable ticket ---");
+  const webhookBody2 = JSON.stringify(testTicket2);
+  const sig2 = computeWebhookSignature(webhookBody2, WEBHOOK_SECRET);
   const response2 = await fetch(webhookUrl, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(testTicket2),
+    headers: { "Content-Type": "application/json", "x-webhook-signature": sig2 },
+    body: webhookBody2,
   });
 
   const result2 = await response2.json();

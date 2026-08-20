@@ -8,8 +8,10 @@
  * after the background classification fails, the ticket status is OPEN and
  * all other fields are unchanged (failure case on the real route).
  */
+import "dotenv/config";
 import { spawn } from 'child_process';
 import { prisma } from './src/lib/prisma';
+import { computeWebhookSignature } from "./src/utils/webhookSigner";
 
 async function wait(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
 
@@ -58,17 +60,19 @@ async function main() {
   console.log('Server ready.');
 
   const title = `E2E_NONMATCH_${Date.now()}`;
+  const webhookBody = JSON.stringify({
+    title,
+    description: 'zqxjk random text about a flibberdigibbet quantum widget — not in any knowledge base.',
+    senderName: 'E2E Customer',
+    senderEmail: 'e2e@example.com',
+    priority: 'MEDIUM',
+    category: null,
+  });
+  const webhookSig = computeWebhookSignature(webhookBody, process.env.WEBHOOK_SECRET!);
   const res = await fetch('http://localhost:3001/api/webhooks/tickets', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      title,
-      description: 'zqxjk random text about a flibberdigibbet quantum widget — not in any knowledge base.',
-      senderName: 'E2E Customer',
-      senderEmail: 'e2e@example.com',
-      priority: 'MEDIUM',
-      category: null,
-    }),
+    headers: { 'Content-Type': 'application/json', 'x-webhook-signature': webhookSig },
+    body: webhookBody,
   });
   const body = await res.json();
   console.log('Webhook response: HTTP', res.status, '| ticket id:', body.id, '| status:', body.status);

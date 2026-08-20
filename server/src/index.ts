@@ -11,10 +11,11 @@ import aiRouter from "./routes/ai.routes";
 import webhookRouter from "./routes/webhooks";
 import dashboardRouter from "./routes/dashboard.routes";
 import { EmailService } from "./services/email.service";
+import { verifyWebhookSignature } from "./middleware/webhook.middleware";
 
 console.log("Server starting..."); // Debug line
 
-const requiredEnvVars = ["DATABASE_URL", "AUTH_SECRET"];
+const requiredEnvVars = ["DATABASE_URL", "AUTH_SECRET", "WEBHOOK_SECRET"];
 for (const varName of requiredEnvVars) {
   if (!process.env[varName]) {
     throw new Error(`Missing required environment variable: ${varName}`);
@@ -52,8 +53,17 @@ app.use((req, _res, next) => {
   next();
 });
 
-// Body parser MUST come BEFORE auth routes for JSON bodies to be parsed
-app.use(express.json());
+// Body parser MUST come BEFORE auth routes for JSON bodies to be parsed.
+// The `verify` callback preserves the raw Buffer so that webhook signature
+// verification (see middleware/webhook.middleware.ts) can compute HMAC over
+// the exact bytes the client sent.
+app.use(
+  express.json({
+    verify: (req: any, _res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
 
 // Proper better-auth integration - mount at /api/auth
 console.log('Mounting auth middleware at /api/auth');
@@ -86,8 +96,9 @@ app.use("/api/tickets", async (req: Request, res: Response, next: NextFunction) 
 
 app.use("/api/tickets", ticketRouter);
 
-// Webhook routes (no authentication required for external systems)
-app.use("/api/webhooks", webhookRouter);
+// Webhook routes — signature verification middleware runs before the router.
+// External systems must sign the request body with WEBHOOK_SECRET.
+app.use("/api/webhooks", verifyWebhookSignature, webhookRouter);
 
 // User routes (admin only)
 app.use("/api/users", userRouter);
