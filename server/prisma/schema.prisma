@@ -169,6 +169,18 @@ model EmailMessage {
   /// Number of send attempts made for this outbound email.
   retryCount    Int    @default(0)
 
+  /// Snapshot of the recipient address, used to re-send on retry without
+  /// depending on mutable ticket data.
+  toAddress     String?
+  /// Snapshot of the email subject for retry sends.
+  subject       String?
+  /// Snapshot of the rendered HTML body for retry sends.
+  bodyHtml      String?
+  /// Earliest time the delivery worker may attempt the next (re)send.
+  nextRetryAt   DateTime?
+  /// Time of the most recent send attempt by the delivery worker or inline path.
+  lastAttemptAt DateTime?
+
   ticketId String
   ticket   Ticket  @relation("TicketEmailMessages", fields: [ticketId], references: [id])
   replyId  String?
@@ -178,6 +190,7 @@ model EmailMessage {
   @@index([gmailThreadId])
   @@index([ticketId])
   @@index([direction, deliveryStatus])
+  @@index([direction, deliveryStatus, nextRetryAt])
   @@map("EmailMessage")
 }
 

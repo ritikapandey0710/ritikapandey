@@ -9,9 +9,12 @@ import ticketRouter from "./routes/ticket.routes";
 import userRouter from "./routes/user.routes";
 import aiRouter from "./routes/ai.routes";
 import webhookRouter from "./routes/webhooks";
+import resendWebhookRouter from "./routes/resendWebhooks";
 import dashboardRouter from "./routes/dashboard.routes";
 import { EmailService } from "./services/email.service";
 import { verifyWebhookSignature } from "./middleware/webhook.middleware";
+import { verifyResendWebhookSignature } from "./middleware/resendWebhook.middleware";
+import { startDeliveryWorker } from "./services/emailDelivery.service";
 
 console.log("Server starting..."); // Debug line
 
@@ -99,6 +102,9 @@ app.use("/api/tickets", ticketRouter);
 // Webhook routes — signature verification middleware runs before the router.
 // External systems must sign the request body with WEBHOOK_SECRET.
 app.use("/api/webhooks", verifyWebhookSignature, webhookRouter);
+
+// Resend delivery-event webhooks (Svix-signed with RESEND_WEBHOOK_SECRET).
+app.use("/api/webhooks/resend", verifyResendWebhookSignature, resendWebhookRouter);
 
 // User routes (admin only)
 app.use("/api/users", userRouter);
@@ -206,6 +212,14 @@ const startEmailService = async () => {
 
 // Start email service
 startEmailService();
+
+// Start the outbound email delivery retry worker (Phase 5). Re-sends
+// QUEUED/FAILED outbound emails using their stored snapshots until sent or
+// attempts are exhausted. Enabled by default; disable with EMAIL_RETRY_ENABLED=false.
+if (process.env.EMAIL_RETRY_ENABLED !== "false") {
+  const retryIntervalMs = parseInt(process.env.EMAIL_RETRY_INTERVAL_MS || "60000", 10);
+  startDeliveryWorker(retryIntervalMs);
+}
 
 // Graceful shutdown
 process.on('SIGINT', async () => {

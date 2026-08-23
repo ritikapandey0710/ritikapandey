@@ -358,7 +358,14 @@ export class EmailService {
   }
 
   /**
-   * Send auto-response email
+   * Send the "ticket created" auto-response to the sender of an inbound email.
+   *
+   * Phase 5: this is now a fully tracked outbound email — recorded as an
+   * OUTBOUND EmailMessage row (QUEUED -> SENT/FAILED) with a full send
+   * snapshot so the delivery worker can retry it if Resend fails. Threading
+   * headers are set so customer replies thread onto the same ticket.
+   *
+   * Best-effort: never throws into the inbound processing path.
    */
   private async sendAutoResponse(
     to: string,
@@ -369,34 +376,97 @@ export class EmailService {
       const html = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2>Thank you for your submission</h2>
-          <p>Your ticket has been created with ID: <strong>${ticketId}</strong></p>
-          <p>We will respond to your inquiry shortly.</p>
+          <p>Your ticket has been created. We will respond to your inquiry shortly.</p>
         </div>
       `;
 
       const emailSubject = `Re: ${subject} (Ticket #${ticketId})`;
 
-      if (!this.resend) {
+      if (!process.env.RESEND_API_KEY) {
         console.log('RESEND_API_KEY not configured, skipping auto-response email');
         return;
       }
 
-      const { data, error } = await this.resend.emails.send({
-        from: this.fromEmail,
-        to: [to],
-        subject: emailSubject,
-        html,
+      // Threading headers: reply to the latest inbound email on this ticket.
+      const lastEmail = await prisma.emailMessage.findFirst({
+        where: { ticketId },
+        orderBy: { createdAt: 'desc' },
       });
-
-      if (error) {
-        console.error('Failed to send auto-response via Resend:', error);
-        throw new Error(`Resend failed to send auto-response: ${error.message}`);
+      const headers: Record<string, string> = {};
+      if (lastEmail?.messageId && !lastEmail.messageId.startsWith('pending-')) {
+        const wrapped = `<${lastEmail.messageId}>`;
+        headers['In-Reply-To'] = wrapped;
+        headers['References'] = lastEmail.references
+          ? `${lastEmail.references} ${wrapped}`
+          : wrapped;
       }
 
-      console.log(`Auto-response sent via Resend: ${data?.id}`);
+      // Record QUEUED with a full snapshot for the delivery worker.
+      const pendingMessageId = `pending-autoresponse-${ticketId}`;
+      let outboundRowId: string | null = null;
+      try {
+        const existing = await prisma.emailMessage.findUnique({
+          where: { messageId: pendingMessageId },
+          select: { id: true },
+        });
+        if (existing) {
+          outboundRowId = existing.id;
+        } else {
+          const queued = await prisma.emailMessage.create({
+            data: {
+              messageId: pendingMessageId,
+              inReplyTo: headers['In-Reply-To'],
+              references: headers['References'],
+              ticketId,
+              direction: 'OUTBOUND',
+              deliveryStatus: 'QUEUED',
+              toAddress: to,
+              subject: emailSubject,
+              bodyHtml: html,
+            },
+          });
+          outboundRowId = queued.id;
+        }
+      } catch (error) {
+        console.error(`Failed to record QUEUED auto-response EmailMessage for ticket ${ticketId}:`, error);
+      }
+
+      const result = await sendEmailWithRetry(to, emailSubject, html,
+        Object.keys(headers).length > 0 ? headers : undefined);
+
+      if (result.emailId && outboundRowId) {
+        await prisma.emailMessage.update({
+          where: { id: outboundRowId },
+          data: {
+            messageId: result.emailId,
+            deliveryStatus: 'SENT',
+            lastError: null,
+            retryCount: result.attempts,
+          },
+        }).catch((err) => {
+          console.error(`Failed to mark auto-response EmailMessage SENT for ticket ${ticketId}:`, err);
+        });
+        console.log(`Auto-response sent via Resend for ticket ${ticketId} (email id: ${result.emailId})`);
+        return;
+      }
+      if (!result.emailId) {
+        console.error(`Failed to send auto-response for ticket ${ticketId}: ${result.error ?? 'unknown error'}`);
+        if (outboundRowId) {
+          await prisma.emailMessage.update({
+            where: { id: outboundRowId },
+            data: {
+              deliveryStatus: 'FAILED',
+              lastError: result.error ?? 'Resend unavailable or failed',
+              retryCount: result.attempts,
+            },
+          }).catch((err) => {
+            console.error(`Failed to mark auto-response EmailMessage FAILED for ticket ${ticketId}:`, err);
+          });
+        }
+      }
     } catch (error) {
+      // Never propagate into inbound email processing.
       console.error('Failed to send auto-response:', error);
-      throw error;
     }
   }
 
@@ -495,6 +565,9 @@ export class EmailService {
             ticketId: ticket.id,
             direction: 'OUTBOUND',
             deliveryStatus: 'QUEUED',
+            toAddress: senderEmail,
+            subject: 'Help Desk - Ticket Created',
+            bodyHtml: html,
           },
         });
         outboundRowId = queued.id;

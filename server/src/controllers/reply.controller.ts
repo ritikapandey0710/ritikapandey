@@ -41,10 +41,30 @@ async function sendAgentReplyEmail(params: {
         : wrapped;
     }
 
+    const escapedBody = replyBody
+      .replace(/\u0026/g, "\u0026amp;")
+      .replace(/</g, "\u0026lt;")
+      .replace(/>/g, "\u0026gt;");
+
+    // Convert newlines to <br/> without embedding raw newlines in literals
+    const nl = String.fromCharCode(10);
+    const bodyHtml = escapedBody.split(nl).join("<br/>");
+
+    const html = [
+      '<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">',
+      '<h2 style="color: #1a56db; margin-bottom: 8px;">Help Desk</h2>',
+      `<p style="color: #333; font-size: 15px; line-height: 1.6;">${bodyHtml}</p>`,
+      "</div>",
+    ].join(nl);
+
+    const subject = `Re: ${ticketTitle}`;
+
     // Record the outbound email as QUEUED before sending. The unique
     // messageId constraint is satisfied with a pending placeholder that is
     // replaced by the Resend email ID after a successful send. Duplicate-safe:
     // if a row already exists (e.g. retried flow), reuse it instead of failing.
+    // A full send snapshot (toAddress/subject/bodyHtml) is stored so the
+    // Phase 5 delivery worker can re-send without depending on ticket data.
     const pendingMessageId = `pending-outbound-${replyId}`;
     let outboundRowId: string | null = null;
     try {
@@ -64,6 +84,9 @@ async function sendAgentReplyEmail(params: {
             replyId,
             direction: "OUTBOUND",
             deliveryStatus: "QUEUED",
+            toAddress: senderEmail.trim(),
+            subject,
+            bodyHtml: html,
           },
         });
         outboundRowId = queued.id;
@@ -77,25 +100,9 @@ async function sendAgentReplyEmail(params: {
       );
     }
 
-    const escapedBody = replyBody
-      .replace(/\u0026/g, "\u0026amp;")
-      .replace(/</g, "\u0026lt;")
-      .replace(/>/g, "\u0026gt;");
-
-    // Convert newlines to <br/> without embedding raw newlines in literals
-    const nl = String.fromCharCode(10);
-    const bodyHtml = escapedBody.split(nl).join("<br/>");
-
-    const html = [
-      '<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">',
-      '<h2 style="color: #1a56db; margin-bottom: 8px;">Help Desk</h2>',
-      `<p style="color: #333; font-size: 15px; line-height: 1.6;">${bodyHtml}</p>`,
-      "</div>",
-    ].join(nl);
-
     const result = await sendEmailWithRetry(
       senderEmail,
-      `Re: ${ticketTitle}`,
+      subject,
       html,
       Object.keys(headers).length > 0 ? headers : undefined
     );
