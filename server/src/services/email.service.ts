@@ -3,7 +3,7 @@ import IMAP = require('imap-simple');
 import { prisma } from '../lib/prisma';
 import nodemailer from 'nodemailer';
 import { Resend } from 'resend';
-import { sendEmail } from './resend.service';
+import { sendEmailWithRetry } from './resend.service';
 
 interface EmailOptions {
   imap?: {
@@ -256,7 +256,12 @@ export class EmailService {
     replyId?: string;
   }): Promise<void> {
     try {
-      await prisma.emailMessage.create({ data });
+      await prisma.emailMessage.create({
+        data: {
+          ...data,
+          direction: 'INBOUND',
+        },
+      });
     } catch (error: any) {
       // P2002 = unique constraint violation on messageId: already recorded
       if (error?.code !== 'P2002') {
@@ -403,7 +408,9 @@ export class EmailService {
    * sender email, missing RESEND_API_KEY, or a Resend failure), the error is
    * simply logged and processing continues.
    *
-   * Reuses the existing Resend integration in ./resend.service (sendEmail).
+   * Reuses the existing Resend integration in ./resend.service
+   * (sendEmailWithRetry) and records delivery status on an OUTBOUND
+   * EmailMessage row (QUEUED -> SENT/FAILED).
    */
   static async sendTicketCreatedNotification(ticket: {
     id: string;
@@ -469,18 +476,69 @@ export class EmailService {
       </div>
     `;
 
+    // Record the outbound email as QUEUED before sending, using a clearly
+    // marked pending placeholder messageId (the Resend API does not return an
+    // RFC Message-ID). Duplicate-safe: reuse the row if it already exists.
+    const pendingMessageId = `pending-created-${ticket.id}`;
+    let outboundRowId: string | null = null;
     try {
-      const emailId = await sendEmail(
+      const existing = await prisma.emailMessage.findUnique({
+        where: { messageId: pendingMessageId },
+        select: { id: true },
+      });
+      if (existing) {
+        outboundRowId = existing.id;
+      } else {
+        const queued = await prisma.emailMessage.create({
+          data: {
+            messageId: pendingMessageId,
+            ticketId: ticket.id,
+            direction: 'OUTBOUND',
+            deliveryStatus: 'QUEUED',
+          },
+        });
+        outboundRowId = queued.id;
+      }
+    } catch (error) {
+      console.error(`Failed to record QUEUED ticket-created EmailMessage for ticket ${ticket.id}:`, error);
+    }
+
+    try {
+      const result = await sendEmailWithRetry(
         senderEmail,
         'Help Desk - Ticket Created',
         html
       );
-      if (emailId) {
-        console.log(`Ticket-created email sent for ticket ${ticket.id} (email id: ${emailId})`);
+      if (result.emailId && outboundRowId) {
+        await prisma.emailMessage.update({
+          where: { id: outboundRowId },
+          data: {
+            messageId: result.emailId,
+            deliveryStatus: 'SENT',
+            lastError: null,
+            retryCount: result.attempts,
+          },
+        }).catch((err) => {
+          console.error(`Failed to mark ticket-created EmailMessage SENT for ticket ${ticket.id}:`, err);
+        });
+        console.log(`Ticket-created email sent for ticket ${ticket.id} (email id: ${result.emailId})`);
         return;
       }
-      // sendEmail already logged the failure; just ensure we don't proceed silently
-      console.log(`Ticket-created email not sent for ticket ${ticket.id} (Resend unavailable or failed)`);
+      if (!result.emailId) {
+        console.log(`Ticket-created email not sent for ticket ${ticket.id} (Resend unavailable or failed): ${result.error ?? 'unknown error'}`);
+        if (outboundRowId) {
+          await prisma.emailMessage.update({
+            where: { id: outboundRowId },
+            data: {
+              deliveryStatus: 'FAILED',
+              lastError: result.error ?? 'Resend unavailable or failed',
+              retryCount: result.attempts,
+            },
+          }).catch((err) => {
+            console.error(`Failed to mark ticket-created EmailMessage FAILED for ticket ${ticket.id}:`, err);
+          });
+        }
+      }
     } catch (error) {
       console.error(`Failed to send ticket-created email for ticket ${ticket.id}:`, error);
     }

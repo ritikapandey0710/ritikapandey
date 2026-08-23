@@ -108,6 +108,23 @@ enum SenderType {
   CUSTOMER
 }
 
+/// Whether an EmailMessage row was recorded from an inbound (received) email
+/// or an outbound (sent) email.
+enum EmailDirection {
+  INBOUND
+  OUTBOUND
+}
+
+/// Delivery lifecycle for outbound emails. Inbound rows have no delivery
+/// status (null).
+enum EmailDeliveryStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  BOUNCED
+  FAILED
+}
+
 model Reply {
   id        String   @id @default(uuid())
   body      String
@@ -129,7 +146,10 @@ model Reply {
 /// email service. One row per processed email Message-ID.
 model EmailMessage {
   id            String   @id @default(uuid())
-  /// RFC 5322 Message-ID of the incoming email (unique = duplicate prevention)
+  /// RFC 5322 Message-ID of the incoming email, or the Resend email ID /
+  /// pending marker for outbound emails (unique = duplicate prevention).
+  /// Outbound rows do NOT contain an RFC Message-ID: the Resend send API only
+  /// returns its own opaque email id.
   messageId     String   @unique
   /// RFC 5322 In-Reply-To header (raw)
   inReplyTo     String?
@@ -139,6 +159,16 @@ model EmailMessage {
   gmailThreadId String?
   createdAt     DateTime @default(now())
 
+  /// Direction of the email. Defaults to INBOUND so all pre-existing rows
+  /// (which were inbound-only) keep their semantics.
+  direction     EmailDirection @default(INBOUND)
+  /// Delivery status for OUTBOUND emails. Null for INBOUND emails.
+  deliveryStatus EmailDeliveryStatus?
+  /// Last error message when an outbound send failed.
+  lastError     String?
+  /// Number of send attempts made for this outbound email.
+  retryCount    Int    @default(0)
+
   ticketId String
   ticket   Ticket  @relation("TicketEmailMessages", fields: [ticketId], references: [id])
   replyId  String?
@@ -147,6 +177,7 @@ model EmailMessage {
   @@index([inReplyTo])
   @@index([gmailThreadId])
   @@index([ticketId])
+  @@index([direction, deliveryStatus])
   @@map("EmailMessage")
 }
 

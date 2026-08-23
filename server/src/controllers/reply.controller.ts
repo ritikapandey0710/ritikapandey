@@ -1,9 +1,15 @@
 import { prisma } from "../lib/prisma";
-import { sendEmail } from "../services/resend.service";
+import { sendEmailWithRetry } from "../services/resend.service";
 
 /**
  * Best-effort, non-blocking: send the agent reply to the customer via Resend
- * and record the outbound email in EmailMessage for threading. Never throws.
+ * and record the outbound email in EmailMessage for threading with delivery
+ * status tracking (QUEUED -> SENT/FAILED). Never throws.
+ *
+ * Note on messageId: the Resend send API only returns its own opaque email id
+ * (no RFC 5322 Message-ID), so while the send is pending we store a clearly
+ * marked `pending-outbound-<replyId>` placeholder and replace it with the
+ * Resend ID once known. We never invent an RFC Message-ID.
  */
 async function sendAgentReplyEmail(params: {
   ticketId: string;
@@ -35,6 +41,42 @@ async function sendAgentReplyEmail(params: {
         : wrapped;
     }
 
+    // Record the outbound email as QUEUED before sending. The unique
+    // messageId constraint is satisfied with a pending placeholder that is
+    // replaced by the Resend email ID after a successful send. Duplicate-safe:
+    // if a row already exists (e.g. retried flow), reuse it instead of failing.
+    const pendingMessageId = `pending-outbound-${replyId}`;
+    let outboundRowId: string | null = null;
+    try {
+      const existing = await prisma.emailMessage.findUnique({
+        where: { messageId: pendingMessageId },
+        select: { id: true },
+      });
+      if (existing) {
+        outboundRowId = existing.id;
+      } else {
+        const queued = await prisma.emailMessage.create({
+          data: {
+            messageId: pendingMessageId,
+            inReplyTo: headers["In-Reply-To"],
+            references: headers["References"],
+            ticketId,
+            replyId,
+            direction: "OUTBOUND",
+            deliveryStatus: "QUEUED",
+          },
+        });
+        outboundRowId = queued.id;
+      }
+    } catch (error) {
+      // Tracking is best-effort; sending proceeds even if the QUEUED row
+      // could not be created.
+      console.error(
+        `Failed to record QUEUED outbound EmailMessage ticketId=${ticketId} replyId=${replyId}:`,
+        error
+      );
+    }
+
     const escapedBody = replyBody
       .replace(/\u0026/g, "\u0026amp;")
       .replace(/</g, "\u0026lt;")
@@ -51,35 +93,53 @@ async function sendAgentReplyEmail(params: {
       "</div>",
     ].join(nl);
 
-    const emailId = await sendEmail(
+    const result = await sendEmailWithRetry(
       senderEmail,
       `Re: ${ticketTitle}`,
       html,
       Object.keys(headers).length > 0 ? headers : undefined
     );
 
-    if (!emailId) {
+    if (!result.emailId) {
       console.error(
-        `Failed to send reply email (Resend unavailable or failed) ticketId=${ticketId} replyId=${replyId}`
+        `Failed to send reply email (Resend unavailable or failed) ticketId=${ticketId} replyId=${replyId}: ${result.error ?? "unknown error"}`
       );
+      // Mark the tracked row FAILED so delivery state is observable.
+      if (outboundRowId) {
+        await prisma.emailMessage
+          .update({
+            where: { id: outboundRowId },
+            data: {
+              deliveryStatus: "FAILED",
+              lastError: result.error ?? "Resend unavailable or failed",
+              retryCount: result.attempts,
+            },
+          })
+          .catch((err) =>
+            console.error(
+              `Failed to mark outbound EmailMessage FAILED ticketId=${ticketId} replyId=${replyId}:`,
+              err
+            )
+          );
+      }
       return;
     }
 
-    // Record outbound email for threading/dedup. Duplicate-safe (P2002 swallowed).
+    // Update the tracked row to SENT and store the real Resend email ID.
     try {
-      await prisma.emailMessage.create({
+      await prisma.emailMessage.update({
+        where: { id: outboundRowId! },
         data: {
-          messageId: emailId,
-          inReplyTo: headers["In-Reply-To"],
-          references: headers["References"],
-          ticketId,
-          replyId,
+          messageId: result.emailId,
+          deliveryStatus: "SENT",
+          lastError: null,
+          retryCount: result.attempts,
         },
       });
     } catch (error: any) {
       if (error?.code !== "P2002") {
         console.error(
-          `Failed to record outbound EmailMessage ticketId=${ticketId} replyId=${replyId}:`,
+          `Failed to update outbound EmailMessage to SENT ticketId=${ticketId} replyId=${replyId}:`,
           error
         );
       }
