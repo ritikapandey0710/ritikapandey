@@ -1,4 +1,96 @@
 import { prisma } from "../lib/prisma";
+import { sendEmail } from "../services/resend.service";
+
+/**
+ * Best-effort, non-blocking: send the agent reply to the customer via Resend
+ * and record the outbound email in EmailMessage for threading. Never throws.
+ */
+async function sendAgentReplyEmail(params: {
+  ticketId: string;
+  replyId: string;
+  ticketTitle: string;
+  senderEmail: string;
+  replyBody: string;
+}): Promise<void> {
+  const { ticketId, replyId, ticketTitle, senderEmail, replyBody } = params;
+
+  try {
+    if (!senderEmail || !senderEmail.trim()) {
+      console.log(`Skipping reply email for ticket ${ticketId}: no customer email`);
+      return;
+    }
+
+    // Fetch latest EmailMessage for threading headers (best-effort)
+    const lastEmail = await prisma.emailMessage.findFirst({
+      where: { ticketId },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const headers: Record<string, string> = {};
+    if (lastEmail?.messageId) {
+      const wrapped = `<${lastEmail.messageId}>`;
+      headers["In-Reply-To"] = wrapped;
+      headers["References"] = lastEmail.references
+        ? `${lastEmail.references} ${wrapped}`
+        : wrapped;
+    }
+
+    const escapedBody = replyBody
+      .replace(/\u0026/g, "\u0026amp;")
+      .replace(/</g, "\u0026lt;")
+      .replace(/>/g, "\u0026gt;");
+
+    // Convert newlines to <br/> without embedding raw newlines in literals
+    const nl = String.fromCharCode(10);
+    const bodyHtml = escapedBody.split(nl).join("<br/>");
+
+    const html = [
+      '<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">',
+      '<h2 style="color: #1a56db; margin-bottom: 8px;">Help Desk</h2>',
+      `<p style="color: #333; font-size: 15px; line-height: 1.6;">${bodyHtml}</p>`,
+      "</div>",
+    ].join(nl);
+
+    const emailId = await sendEmail(
+      senderEmail,
+      `Re: ${ticketTitle}`,
+      html,
+      Object.keys(headers).length > 0 ? headers : undefined
+    );
+
+    if (!emailId) {
+      console.error(
+        `Failed to send reply email (Resend unavailable or failed) ticketId=${ticketId} replyId=${replyId}`
+      );
+      return;
+    }
+
+    // Record outbound email for threading/dedup. Duplicate-safe (P2002 swallowed).
+    try {
+      await prisma.emailMessage.create({
+        data: {
+          messageId: emailId,
+          inReplyTo: headers["In-Reply-To"],
+          references: headers["References"],
+          ticketId,
+          replyId,
+        },
+      });
+    } catch (error: any) {
+      if (error?.code !== "P2002") {
+        console.error(
+          `Failed to record outbound EmailMessage ticketId=${ticketId} replyId=${replyId}:`,
+          error
+        );
+      }
+    }
+  } catch (error) {
+    console.error(
+      `Error sending reply email ticketId=${ticketId} replyId=${replyId}:`,
+      error
+    );
+  }
+}
 
 export async function createReply(req: any, res: any) {
   const { body } = req.body;
@@ -45,6 +137,23 @@ export async function createReply(req: any, res: any) {
         updatedAt: new Date(),
       },
     });
+
+    // Best-effort, non-blocking: email the customer when an AGENT replies.
+    // Never fails or rolls back the reply if Resend is unavailable/fails.
+    if (senderType === "AGENT") {
+      void sendAgentReplyEmail({
+        ticketId,
+        replyId: reply.id,
+        ticketTitle: ticket.title,
+        senderEmail: ticket.senderEmail,
+        replyBody: body.trim(),
+      }).catch((err) =>
+        console.error(
+          `Unexpected error in reply email flow ticketId=${ticketId} replyId=${reply.id}:`,
+          err
+        )
+      );
+    }
 
     res.status(201).json(reply);
   } catch (error: any) {

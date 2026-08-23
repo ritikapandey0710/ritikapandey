@@ -21,7 +21,8 @@ export function getEmailFrom(): string {
 export async function sendEmail(
   to: string,
   subject: string,
-  html: string
+  html: string,
+  headers?: Record<string, string>
 ): Promise<string | null> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
@@ -37,6 +38,7 @@ export async function sendEmail(
       to,
       subject,
       html,
+      ...(headers && Object.keys(headers).length > 0 ? { headers } : {}),
     });
 
     if (error) {
