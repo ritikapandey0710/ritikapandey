@@ -1,9 +1,7 @@
 import { PrismaClient } from './server/src/generated/prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 
-// Override the database URL to ensure we use the correct database
-process.env.DATABASE_URL = 'postgresql://postgres:230023107062@localhost:5432/helpdesk?schema=public';
-
+// Read the database URL from the environment (e.g. loaded from server/.env)
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
   throw new Error('DATABASE_URL is not set');

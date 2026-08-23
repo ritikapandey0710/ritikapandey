@@ -1,7 +1,8 @@
 import { PrismaClient } from "./src/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
-const DATABASE_URL = "postgresql://postgres:230023107062@localhost:5432/helpdesk?schema=public";
+const DATABASE_URL = process.env.DATABASE_URL;
+if (!DATABASE_URL) throw new Error("DATABASE_URL environment variable is not set");
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: DATABASE_URL }) });
 
 const AI_AGENT_EMAIL = "ai@helpdesk.local";

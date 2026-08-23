@@ -2,9 +2,11 @@ import { simpleParser } from 'mailparser';
 import IMAP = require('imap-simple');
 import { prisma } from '../lib/prisma';
 import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
+import { sendEmail } from './resend.service';
 
 interface EmailOptions {
-  imap: {
+  imap?: {
     user: string;
     password: string;
     host: string;
@@ -35,18 +37,25 @@ export class EmailService {
   private imapConfig: any;
   private smtpTransport: nodemailer.Transporter | null;
   private fromEmail: string;
+  private resend: Resend | null;
 
   constructor(options: EmailOptions) {
-    this.imapConfig = {
-      user: options.imap.user,
-      password: options.imap.password,
-      host: options.imap.host,
-      port: options.imap.port,
-      tls: options.imap.tls,
-      authTimeout: options.imap.authTimeout || 5000,
-    };
+    this.imapConfig = options.imap
+      ? {
+          user: options.imap.user,
+          password: options.imap.password,
+          host: options.imap.host,
+          port: options.imap.port,
+          tls: options.imap.tls,
+          authTimeout: options.imap.authTimeout || 5000,
+        }
+      : null;
 
     this.fromEmail = options.from;
+
+    this.resend = process.env.RESEND_API_KEY
+      ? new Resend(process.env.RESEND_API_KEY)
+      : null;
 
     if (options.smtp) {
       this.smtpTransport = nodemailer.createTransport({
@@ -87,7 +96,11 @@ export class EmailService {
    * Connect to IMAP server
    */
   private async connectIMAP(): Promise<any> {
-    const connection = await IMAP.connect(this.imapConfig);
+    // imap-simple v5 requires the node-imap config to be nested under an
+    // `imap` key: IMAP.connect({ imap: { user, password, host, port, tls, ... } }).
+    // Passing the flat object directly causes imap-simple to fall back to
+    // node-imap defaults (localhost:143, no TLS).
+    const connection = await IMAP.connect({ imap: this.imapConfig });
     return connection;
   }
 
@@ -165,7 +178,9 @@ export class EmailService {
   }
 
   /**
-   * Create a ticket from parsed email data
+   * Create a ticket from parsed email data using the SHARED ticket-processing
+   * pipeline (same as API/webhook creation): NEW → PROCESSING → KB auto-resolve
+   * check → background AI classification, with OPEN+unassigned fallback on AI failure.
    */
   private async createTicketFromEmail(
     email: ParsedEmail,
@@ -179,7 +194,8 @@ export class EmailService {
     const senderEmail = sender?.address ?? '';
     const senderName = sender?.name ?? senderEmail;
 
-    // Determine priority based on subject keywords (simple heuristic)
+    // Determine initial priority based on subject keywords (simple heuristic).
+    // AI classification may refine this later in the shared pipeline.
     let priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT' = 'MEDIUM';
     const lowerSubject = email.subject.toLowerCase();
     if (lowerSubject.includes('urgent') || lowerSubject.includes('asap') ||
@@ -191,19 +207,15 @@ export class EmailService {
       priority = 'LOW';
     }
 
-    const ticket = await prisma.ticket.create({
-      data: {
-        title,
-        description,
-        status: 'OPEN',
-        priority,
-        senderName,
-        senderEmail,
-        reporterId: userId,
-      },
-      include: {
-        user_Ticket_reporterIdTouser: { select: { id: true, name: true, email: true } },
-      },
+    const { processNewTicket } = await import('./ticketProcessing.service');
+
+    const ticket = await processNewTicket({
+      title,
+      description,
+      priority,
+      senderName,
+      senderEmail,
+      reporterId: userId,
     });
 
     return ticket;
@@ -217,20 +229,129 @@ export class EmailService {
     subject: string,
     ticketId: string
   ): Promise<void> {
-    if (!this.smtpTransport) {
-      console.log('SMTP not configured, skipping auto-response');
+    try {
+      const html = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2>Thank you for your submission</h2>
+          <p>Your ticket has been created with ID: <strong>${ticketId}</strong></p>
+          <p>We will respond to your inquiry shortly.</p>
+        </div>
+      `;
+
+      const emailSubject = `Re: ${subject} (Ticket #${ticketId})`;
+
+      if (!this.resend) {
+        console.log('RESEND_API_KEY not configured, skipping auto-response email');
+        return;
+      }
+
+      const { data, error } = await this.resend.emails.send({
+        from: this.fromEmail,
+        to: [to],
+        subject: emailSubject,
+        html,
+      });
+
+      if (error) {
+        console.error('Failed to send auto-response via Resend:', error);
+        throw new Error(`Resend failed to send auto-response: ${error.message}`);
+      }
+
+      console.log(`Auto-response sent via Resend: ${data?.id}`);
+    } catch (error) {
+      console.error('Failed to send auto-response:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Send a "Ticket Created" email notification to the ticket sender.
+   *
+   * This is a best-effort, non-blocking notification. It never throws and
+   * never affects ticket creation. If anything goes wrong (missing/invalid
+   * sender email, missing RESEND_API_KEY, or a Resend failure), the error is
+   * simply logged and processing continues.
+   *
+   * Reuses the existing Resend integration in ./resend.service (sendEmail).
+   */
+  static async sendTicketCreatedNotification(ticket: {
+    id: string;
+    ticketNumber: number;
+    title: string;
+    senderEmail: string;
+  }): Promise<void> {
+    const senderEmail = (ticket.senderEmail || '').trim();
+
+    // Escape HTML special characters in the title to prevent HTML injection
+    // (uses unicode escapes to avoid ambiguity with HTML entities)
+    const escapedTitle = (ticket.title || '')
+      .replace(/\u0026/g, '\u0026amp;')
+      .replace(/</g, '\u0026lt;')
+      .replace(/>/g, '\u0026gt;')
+      .replace(/"/g, '\u0026quot;')
+      .replace(/'/g, '\u0026#39;');
+
+    // Do not send if senderEmail is missing or empty
+    if (!senderEmail) {
+      console.log(`Skipping ticket-created email: no sender email for ticket ${ticket.id}`);
       return;
     }
 
+    // Do not send if RESEND_API_KEY is not configured
+    if (!process.env.RESEND_API_KEY) {
+      console.log('RESEND_API_KEY not configured, skipping ticket-created email');
+      return;
+    }
+
+    // Basic email format sanity check
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(senderEmail)) {
+      console.warn(`Skipping ticket-created email: invalid sender email "${senderEmail}" for ticket ${ticket.id}`);
+      return;
+    }
+
+    // Professional HTML body - no internal DB info, no secrets
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+        <h2 style="color: #1a56db; margin-bottom: 8px;">Help Desk</h2>
+        <p style="color: #333; font-size: 16px;">Dear customer,</p>
+        <p style="color: #333; font-size: 15px; line-height: 1.6;">
+          Thank you for contacting our Help Desk. Your request has been received and a ticket has been created.
+        </p>
+        <table style="border-collapse: collapse; margin: 16px 0; font-size: 14px;">
+          <tr>
+            <td style="padding: 6px 12px; font-weight: bold; color: #333;">Ticket Number:</td>
+            <td style="padding: 6px 12px; color: #333;"><strong>#${ticket.ticketNumber}</strong></td>
+          </tr>
+          <tr>
+            <td style="padding: 6px 12px; font-weight: bold; color: #333;">Ticket Title:</td>
+            <td style="padding: 6px 12px; color: #333;">${escapedTitle}</td>
+          </tr>
+        </table>
+        <p style="color: #333; font-size: 15px; line-height: 1.6;">
+          Our support team will review your request and get back to you as soon as possible.
+          Thank you for your patience.
+        </p>
+        <p style="color: #666; font-size: 13px; margin-top: 24px; border-top: 1px solid #eee; padding-top: 12px;">
+          This is an automated notification. Please do not reply to this email.
+        </p>
+      </div>
+    `;
+
     try {
-      await this.smtpTransport.sendMail({
-        from: this.fromEmail,
-        to,
-        subject: `Re: ${subject} (Ticket #${ticketId})`,
-        text: `Thank you for your submission. Your ticket has been created with ID: ${ticketId}\n\nWe will respond to your inquiry shortly.`,
-      });
+      const emailId = await sendEmail(
+        senderEmail,
+        'Help Desk - Ticket Created',
+        html
+      );
+      if (emailId) {
+        console.log(`Ticket-created email sent for ticket ${ticket.id} (email id: ${emailId})`);
+        return;
+      }
+      // sendEmail already logged the failure; just ensure we don't proceed silently
+      console.log(`Ticket-created email not sent for ticket ${ticket.id} (Resend unavailable or failed)`);
     } catch (error) {
-      console.error('Failed to send auto-response:', error);
+      console.error(`Failed to send ticket-created email for ticket ${ticket.id}:`, error);
     }
   }
 

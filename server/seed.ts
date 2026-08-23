@@ -3,8 +3,11 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "@better-auth/prisma-adapter";
 
-// Hardcode the correct database URL so this works even if a system env var overrides it
-const DATABASE_URL = "postgresql://postgres:230023107062@localhost:5432/helpdesk?schema=public";
+const DATABASE_URL = process.env.DATABASE_URL;
+
+if (!DATABASE_URL) {
+  throw new Error("DATABASE_URL environment variable is not set");
+}
 
 // We need the auth instance to use the SAME database, so construct prisma here and build auth manually
 const prisma = new PrismaClient({
@@ -19,7 +22,7 @@ const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
   },
-  secret: "my-helpdesk-project-secret-key-2026-very-long-string-changed",
+  secret: process.env.AUTH_SECRET || process.env.BETTER_AUTH_SECRET || "",
   user: {
     additionalFields: {
       role: {
