@@ -31,6 +31,9 @@ interface ParsedEmail {
   html?: string;
   date: Date;
   messageId: string;
+  inReplyTo?: string;
+  references?: string;
+  gmailThreadId?: string;
 }
 
 export class EmailService {
@@ -124,6 +127,16 @@ export class EmailService {
   private async parseEmail(rawEmail: any): Promise<ParsedEmail> {
     const parsed = await simpleParser(rawEmail);
 
+    // mailparser exposes raw headers via a Map keyed by lowercased header names.
+    // Note: mailparser returns the References header as an array of Message-IDs,
+    // so both string and array forms must be handled (joined with spaces).
+    const headers = parsed.headers as unknown as Map<string, any>;
+    const inReplyTo = headers?.get('in-reply-to');
+    const rawReferences = headers?.get('references');
+    const references = Array.isArray(rawReferences)
+      ? rawReferences.filter((r: any) => typeof r === 'string').join(' ')
+      : rawReferences;
+
     return {
       from: this.normalizeFrom(parsed.from),
       subject: parsed.subject || '(No Subject)',
@@ -131,7 +144,125 @@ export class EmailService {
       html: parsed.html || undefined,
       date: parsed.date || new Date(),
       messageId: parsed.messageId || '',
+      inReplyTo:
+        typeof inReplyTo === 'string' && inReplyTo.trim().length > 0
+          ? inReplyTo.trim()
+          : undefined,
+      references:
+        typeof references === 'string' && references.trim().length > 0
+          ? references.trim()
+          : undefined,
     };
+  }
+
+  /**
+   * Extract the Gmail thread ID (X-GM-THRID) from an IMAP message when it is
+   * reliably available. This is best-effort: depending on server capabilities
+   * and how imap-simple structures the response, the value may be absent, in
+   * which case threading falls back to In-Reply-To / References matching.
+   */
+  private extractGmailThreadId(email: any): string | undefined {
+    const attrs = email?.attributes;
+    if (!attrs) return undefined;
+    const candidates = [attrs.xGmThrid, attrs.threadId, attrs['x-gm-thrid']];
+    for (const candidate of candidates) {
+      if (candidate !== undefined && candidate !== null) {
+        const value = String(candidate).trim();
+        if (value.length > 0) return value;
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Normalize a Message-ID by stripping surrounding angle brackets so that
+   * comparisons between Message-ID / In-Reply-To / References values are
+   * consistent regardless of formatting.
+   */
+  private normalizeMessageId(value: string): string {
+    let v = value.trim();
+    if (v.startsWith('<') && v.endsWith('>')) {
+      v = v.slice(1, -1);
+    }
+    return v.toLowerCase();
+  }
+
+  /**
+   * Split a References header into normalized individual Message-IDs.
+   */
+  private parseReferences(references?: string): string[] {
+    if (!references) return [];
+    return references
+      .split(/\s+/)
+      .map((id) => this.normalizeMessageId(id))
+      .filter((id) => id.length > 0);
+  }
+
+  /**
+   * Find an existing EmailMessage row whose stored threading data matches the
+   * incoming email. Match order:
+   *   1. In-Reply-To  -> stored messageId
+   *   2. References   -> any stored messageId
+   *   3. Gmail thread ID
+   */
+  private async findThreadMatch(
+    email: ParsedEmail
+  ): Promise<{ ticketId: string } | null> {
+    // 1. In-Reply-To
+    if (email.inReplyTo) {
+      const inReplyToId = this.normalizeMessageId(email.inReplyTo);
+      const match = await prisma.emailMessage.findFirst({
+        where: { messageId: inReplyToId },
+        select: { ticketId: true },
+      });
+      if (match) return match;
+    }
+
+    // 2. References (any referenced Message-ID we have seen before)
+    const referenceIds = this.parseReferences(email.references);
+    if (referenceIds.length > 0) {
+      const match = await prisma.emailMessage.findFirst({
+        where: { messageId: { in: referenceIds } },
+        orderBy: { createdAt: 'desc' },
+        select: { ticketId: true },
+      });
+      if (match) return match;
+    }
+
+    // 3. Gmail thread ID
+    if (email.gmailThreadId) {
+      const match = await prisma.emailMessage.findFirst({
+        where: { gmailThreadId: email.gmailThreadId },
+        orderBy: { createdAt: 'desc' },
+        select: { ticketId: true },
+      });
+      if (match) return match;
+    }
+
+    return null;
+  }
+
+  /**
+   * Record threading metadata for a processed email. Duplicate-safe: if the
+   * same Message-ID is somehow processed concurrently, the unique constraint
+   * prevents a second row and the error is swallowed (the first write wins).
+   */
+  private async recordEmailMessage(data: {
+    messageId: string;
+    inReplyTo?: string;
+    references?: string;
+    gmailThreadId?: string;
+    ticketId: string;
+    replyId?: string;
+  }): Promise<void> {
+    try {
+      await prisma.emailMessage.create({ data });
+    } catch (error: any) {
+      // P2002 = unique constraint violation on messageId: already recorded
+      if (error?.code !== 'P2002') {
+        console.error('Failed to record email threading metadata:', error);
+      }
+    }
   }
 
   /**
@@ -387,16 +518,77 @@ export class EmailService {
       const senderEmail = from.address;
       const senderName = from.name;
 
+      // Gmail thread ID is best-effort (may be unavailable)
+      parsedEmail.gmailThreadId = this.extractGmailThreadId(email);
+
+      // Duplicate prevention: skip emails whose Message-ID was already processed
+      if (parsedEmail.messageId) {
+        const existing = await prisma.emailMessage.findUnique({
+          where: { messageId: this.normalizeMessageId(parsedEmail.messageId) },
+          select: { id: true },
+        });
+        if (existing) {
+          console.log(
+            `Skipping duplicate email (already processed): ${parsedEmail.messageId}`
+          );
+          if (email.attributes && email.attributes.uid) {
+            await this.markAsSeen(connection, email.attributes.uid);
+          }
+          return;
+        }
+      }
+
       // Find or create user
       const userId = await this.findOrCreateUser(senderEmail, senderName);
 
-      // Create ticket
-      const ticket = await this.createTicketFromEmail(parsedEmail, userId);
+      // Thread matching: does this email belong to an existing conversation?
+      const threadMatch = await this.findThreadMatch(parsedEmail);
 
-      console.log(`Created ticket ${ticket.id} from email by ${senderEmail}`);
+      if (threadMatch) {
+        // Customer reply to an existing ticket - do NOT create a new ticket
+        // and do NOT run new-ticket AI/KB processing.
+        const reply = await prisma.reply.create({
+          data: {
+            body: this.extractEmailBody(parsedEmail),
+            ticketId: threadMatch.ticketId,
+            authorId: userId,
+            senderType: 'CUSTOMER',
+          },
+        });
 
-      // Send auto-response if configured
-      await this.sendAutoResponse(senderEmail, parsedEmail.subject, ticket.id);
+        console.log(
+          `Added customer reply ${reply.id} to ticket ${threadMatch.ticketId} from email by ${senderEmail}`
+        );
+
+        if (parsedEmail.messageId) {
+          await this.recordEmailMessage({
+            messageId: this.normalizeMessageId(parsedEmail.messageId),
+            inReplyTo: parsedEmail.inReplyTo,
+            references: parsedEmail.references,
+            gmailThreadId: parsedEmail.gmailThreadId,
+            ticketId: threadMatch.ticketId,
+            replyId: reply.id,
+          });
+        }
+      } else {
+        // New conversation - use the Phase 1 pipeline unchanged
+        const ticket = await this.createTicketFromEmail(parsedEmail, userId);
+
+        console.log(`Created ticket ${ticket.id} from email by ${senderEmail}`);
+
+        if (parsedEmail.messageId) {
+          await this.recordEmailMessage({
+            messageId: this.normalizeMessageId(parsedEmail.messageId),
+            inReplyTo: parsedEmail.inReplyTo,
+            references: parsedEmail.references,
+            gmailThreadId: parsedEmail.gmailThreadId,
+            ticketId: ticket.id,
+          });
+        }
+
+        // Send auto-response only for newly created tickets
+        await this.sendAutoResponse(senderEmail, parsedEmail.subject, ticket.id);
+      }
 
       // Mark email as seen
       // Note: We need to get the UID from the email object

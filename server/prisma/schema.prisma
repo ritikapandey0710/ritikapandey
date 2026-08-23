@@ -92,6 +92,7 @@ model Ticket {
   user_Ticket_assigneeIdTouser User?          @relation("Ticket_assigneeIdTouser", fields: [assigneeId], references: [id])
   user_Ticket_reporterIdTouser User?          @relation("Ticket_reporterIdTouser", fields: [reporterId], references: [id])
   replies                      Reply[]        @relation("TicketReplies")
+  emailMessages                EmailMessage[] @relation("TicketEmailMessages")
 
   @@index([assigneeId])
   @@index([priority])
@@ -117,10 +118,36 @@ model Reply {
   senderType SenderType @default(AGENT)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  emailMessages EmailMessage[] @relation("ReplyEmailMessages")
 
   @@index([ticketId])
   @@index([authorId])
   @@map("Reply")
+}
+
+/// Stores threading/dedup metadata for inbound emails processed by the
+/// email service. One row per processed email Message-ID.
+model EmailMessage {
+  id            String   @id @default(uuid())
+  /// RFC 5322 Message-ID of the incoming email (unique = duplicate prevention)
+  messageId     String   @unique
+  /// RFC 5322 In-Reply-To header (raw)
+  inReplyTo     String?
+  /// RFC 5322 References header (raw)
+  references    String?
+  /// Gmail thread ID (X-GM-THRID), when reliably available
+  gmailThreadId String?
+  createdAt     DateTime @default(now())
+
+  ticketId String
+  ticket   Ticket  @relation("TicketEmailMessages", fields: [ticketId], references: [id])
+  replyId  String?
+  reply    Reply?  @relation("ReplyEmailMessages", fields: [replyId], references: [id])
+
+  @@index([inReplyTo])
+  @@index([gmailThreadId])
+  @@index([ticketId])
+  @@map("EmailMessage")
 }
 
 enum Role {
