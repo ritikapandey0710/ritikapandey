@@ -11,6 +11,7 @@ import {
   getRepliesByTicketId
 } from "../controllers/reply.controller";
 import { asyncHandler } from "../utils/asyncHandler";
+import { authenticateAndAuthorizeAdmin } from "../middleware/auth.middleware";
 
 const router = Router();
 
@@ -27,8 +28,8 @@ router.post("/", asyncHandler(createTicket));
 // PUT/PATCH update ticket
 router.patch("/:id", asyncHandler(updateTicket));
 
-// DELETE ticket
-router.delete("/:id", asyncHandler(deleteTicket));
+// DELETE ticket — restricted to authenticated ADMIN users only
+router.delete("/:id", authenticateAndAuthorizeAdmin, asyncHandler(deleteTicket));
 
 // GET replies for a ticket
 router.get("/:id/replies", asyncHandler(getRepliesByTicketId));

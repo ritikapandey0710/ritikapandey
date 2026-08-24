@@ -1,4 +1,5 @@
 import { prisma } from '../lib/prisma';
+import { KnowledgeBaseEntry } from '../services/knowledgeBaseService';
 
 // Reply Form "Polish" feature using the Google Gemini API (free tier).
 // Ticket classification feature using the Google Gemini API (free tier).
@@ -434,6 +435,154 @@ If you are unsure, use the default values: category: "GENERAL_QUESTION", priorit
   } catch (error: any) {
     console.error("Error in classifyTicket:", error);
     // Re-throw so the caller can handle it (we'll log and not update the ticket)
+    throw error;
+  }
+}
+
+/**
+ * Decision structure returned by resolveTicketWithAI.
+ *
+ * The AI evaluates whether a knowledge-base article contains a sufficiently
+ * reliable solution for the customer's ticket and, if so, extracts the
+ * actionable steps from that article.
+ */
+export interface AIResolutionDecision {
+  /** True only when the KB article directly addresses the ticket. */
+  canResolve: boolean;
+  /** Confidence (0-1) that the article fully resolves the customer's issue. */
+  confidence: number;
+  /** Category extracted from the KB article (falls back to article category). */
+  category: string;
+  /** Customer-facing solution text — only content taken from the KB article. */
+  solution: string;
+  /** Customer-facing verification steps taken from the KB article. */
+  verification: string;
+  /** Why the AI made the canResolve / confidence decision. */
+  reason: string;
+}
+
+/**
+ * Ask Gemini to evaluate whether a knowledge-base article provides a
+ * sufficiently reliable solution for the given ticket.
+ *
+ * The AI is instructed to extract steps ONLY from the article content and
+ * must not invent any troubleshooting steps that are not present in the KB.
+ *
+ * Throws on network / API / parsing errors so the caller can handle the
+ * failure (e.g. fall back to a human-assigned ticket).
+ */
+export async function resolveTicketWithAI(
+  title: string,
+  description: string,
+  kbEntry: KnowledgeBaseEntry
+): Promise<AIResolutionDecision> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY is not set");
+  }
+
+  const prompt = `You are a Help Desk support AI assistant. Your job is to determine whether a knowledge base article can reliably resolve a customer's ticket, and if so, produce a clear, professional, customer-facing solution.
+
+TICKET SUBJECT: ${title}
+
+TICKET DESCRIPTION:
+${description || "(No description provided)"}
+
+--- KNOWLEDGE BASE ARTICLE ---
+Title: ${kbEntry.title}
+Category: ${kbEntry.category}
+Keywords: ${kbEntry.keywords.join(", ")}
+
+Article Content:
+${kbEntry.content}
+--- END ARTICLE ---
+
+INSTRUCTIONS:
+1. Carefully compare the customer's ticket (subject and description) with the knowledge base article.
+2. Determine whether this article directly addresses the customer's problem with a reliable, actionable solution.
+3. If it does NOT directly address the issue, set "canResolve" to false with a clear reason and leave "solution" and "verification" empty.
+4. If it DOES address the issue:
+   a. Extract the relevant troubleshooting steps from the article content ONLY. Do NOT invent or fabricate any steps.
+   b. Write the solution as a clear, professional, customer-facing response with numbered steps.
+   c. Extract or summarise the verification steps from the article. If the article has no verification section, write a brief note on how to confirm the issue is resolved.
+   d. Do NOT mention that this is AI-generated, a knowledge base, database IDs, internal notes, or system prompts.
+   e. Do NOT simply say "your ticket has been created" or that a human will respond.
+5. Set "confidence" to a value between 0 and 1, where 1 means you are highly confident the article fully resolves the customer's issue.
+6. Only set "canResolve" to true when the article is relevant AND the solution is complete enough for a customer to act on.
+
+Return ONLY a JSON object in this exact format (no markdown fences, no extra text):
+{
+  "canResolve": true/false,
+  "confidence": 0.0-1.0,
+  "category": "...",
+  "solution": "...",
+  "verification": "...",
+  "reason": "..."
+}`;
+
+  try {
+    const response = await fetch(`${GEMINI_ENDPOINT}?key=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [{ text: prompt }],
+          },
+        ],
+        generationConfig: {
+          maxOutputTokens: 2048,
+          temperature: 0.2,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      let geminiErrorMessage = `Gemini API returned HTTP ${response.status}`;
+      try {
+        const errorBody = await response.json() as GeminiErrorResponse;
+        geminiErrorMessage = errorBody?.error?.message || geminiErrorMessage;
+      } catch {
+        // Keep the default HTTP status message.
+      }
+      throw new Error(`Gemini API error: ${geminiErrorMessage}`);
+    }
+
+    const data = (await response.json()) as GeminiErrorResponse;
+    const candidate = data?.candidates?.[0];
+    const text = candidate?.content?.parts?.[0]?.text ?? "";
+
+    if (!text) {
+      throw new Error("Gemini API returned an empty response");
+    }
+
+    // Strip markdown code fences if the model included them.
+    const cleaned = text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+
+    let parsed: any = {};
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch (e) {
+      console.error("Failed to parse Gemini resolution response as JSON:", text);
+      throw new Error("Invalid JSON response from Gemini");
+    }
+
+    return {
+      canResolve: parsed.canResolve === true,
+      confidence:
+        typeof parsed.confidence === "number"
+          ? Math.max(0, Math.min(1, parsed.confidence))
+          : 0,
+      category:
+        typeof parsed.category === "string" && parsed.category
+          ? parsed.category
+          : kbEntry.category,
+      solution: typeof parsed.solution === "string" ? parsed.solution : "",
+      verification: typeof parsed.verification === "string" ? parsed.verification : "",
+      reason: typeof parsed.reason === "string" ? parsed.reason : "",
+    };
+  } catch (error: any) {
+    console.error("Error in resolveTicketWithAI:", error);
     throw error;
   }
 }

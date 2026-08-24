@@ -4,6 +4,9 @@ import { prisma } from '../lib/prisma';
 import nodemailer from 'nodemailer';
 import { Resend } from 'resend';
 import { sendEmailWithRetry } from './resend.service';
+import { knowledgeBaseService, type KnowledgeBaseEntry } from './knowledgeBaseService';
+import { resolveTicketWithAI, type AIResolutionDecision } from '../controllers/ai.controller';
+import { getOrCreateAIAgent } from './aiAgentService';
 
 interface EmailOptions {
   imap?: {
@@ -24,8 +27,79 @@ interface EmailOptions {
   from: string;
 }
 
+/**
+ * Minimum Gemini confidence required before a ticket is auto-resolved with a
+ * knowledge-base solution. Below this threshold the ticket stays OPEN and the
+ * customer receives a professional "requires further assistance" response.
+ */
+export const AI_RESOLUTION_CONFIDENCE_THRESHOLD = 0.85;
+
+/** Escape user/AI-provided text for safe embedding in an HTML email body. */
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/** Convert plain-text paragraphs into simple HTML blocks for email bodies. */
+function textToHtml(text: string): string {
+  return text
+    .split(/\n\s*\n/)
+    .filter((p) => p.trim().length > 0)
+    .map(
+      (p) =>
+        `<p style="color:#333;font-size:15px;line-height:1.6;">${escapeHtml(p.trim()).replace(/\n/g, '<br/>')}</p>`
+    )
+    .join('\n');
+}
+
+/**
+ * Build the customer-facing solution email from the AI-generated resolution.
+ * The AI is instructed to only use content from the knowledge base article,
+ * so nothing here is invented at send time either.
+ */
+export function buildSolutionEmail(decision: AIResolutionDecision): string {
+  const parts: string[] = [];
+  parts.push('<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">');
+  parts.push('<p style="color:#333;font-size:16px;">Hello,</p>');
+  parts.push(
+    '<p style="color:#333;font-size:15px;">Thank you for contacting Help Desk Support. Please try the following:</p>'
+  );
+  parts.push(textToHtml(decision.solution));
+  if (decision.verification && decision.verification.trim().length > 0) {
+    parts.push('<p style="color:#333;font-size:15px;"><strong>To confirm the issue is resolved:</strong></p>');
+    parts.push(textToHtml(decision.verification));
+  }
+  parts.push(
+    '<p style="color:#333;font-size:15px;">If you are still unable to resolve the issue after following these steps, please reply to this email and we will investigate further.</p>'
+  );
+  parts.push('<p style="color:#333;font-size:15px;">Best regards,<br/>Help Desk Support</p>');
+  parts.push('</div>');
+  return parts.join('\n');
+}
+
+/**
+ * Build the professional fallback email used when the knowledge base does not
+ * contain a reliable solution (or when AI verification fails). This response
+ * never claims the issue has been resolved and never exposes internals.
+ */
+export function buildFallbackEmail(): string {
+  return [
+    '<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">',
+    '<p style="color:#333;font-size:16px;">Hello,</p>',
+    '<p style="color:#333;font-size:15px;line-height:1.6;">Thank you for contacting Help Desk Support.</p>',
+    '<p style="color:#333;font-size:15px;line-height:1.6;">We have reviewed your request, and it requires further assistance from our support team. A support agent will follow up with you as soon as possible.</p>',
+    '<p style="color:#333;font-size:15px;line-height:1.6;">In the meantime, if you have any additional details that may help us assist you, please reply to this email.</p>',
+    '<p style="color:#333;font-size:15px;">Best regards,<br/>Help Desk Support</p>',
+    '</div>',
+  ].join('\n');
+}
+
 interface ParsedEmail {
   from: { address: string; name?: string }[];
+  /** All recipient addresses found in To / Cc / Delivered-To / X-Original-To. */
+  recipients: string[];
   subject: string;
   text: string;
   html?: string;
@@ -122,6 +196,79 @@ export class EmailService {
   }
 
   /**
+   * Collect every recipient address carried by the message: To, Cc, and
+   * Delivered-To / X-Original-To headers (Gmail uses these when forwarding
+   * into the polled mailbox). Returns bare, lowercased addresses.
+   */
+  private extractRecipients(parsed: any, headers: Map<string, any>): string[] {
+    const addresses: string[] = [];
+
+    const pushAddressList = (list: any) => {
+      const arr = Array.isArray(list) ? list : [list];
+      for (const entry of arr) {
+        for (const v of entry?.value ?? []) {
+          if (typeof v?.address === 'string' && v.address.length > 0) {
+            addresses.push(v.address.toLowerCase());
+          }
+        }
+      }
+    };
+
+    pushAddressList(parsed.to);
+    if (parsed.cc) pushAddressList(parsed.cc);
+
+    // Delivered-To / X-Original-To header values are raw "Name <a@b>" strings.
+    const headerValueToAddress = (value: unknown): void => {
+      if (typeof value !== 'string') return;
+      const match = value.match(/<([^>]+)>/);
+      const addr = (match ? match[1] : value).trim().toLowerCase();
+      if (addr.includes('@')) addresses.push(addr);
+    };
+    headerValueToAddress(headers?.get('delivered-to'));
+    headerValueToAddress(headers?.get('x-original-to'));
+
+    return Array.from(new Set(addresses));
+  }
+
+  /**
+   * The configured Help Desk receiving address(es). The IMAP mailbox being
+   * polled (EMAIL_IMAP_USER) IS the Help Desk inbox. Optional extra aliases
+   * can be listed (comma-separated) in HELPDESK_TO_ADDRESSES.
+   */
+  public getHelpdeskAddresses(): string[] {
+    const primary = process.env.EMAIL_IMAP_USER
+      ? this.bareAddress(process.env.EMAIL_IMAP_USER)
+      : null;
+    const aliases = (process.env.HELPDESK_TO_ADDRESSES || '')
+      .split(',')
+      .map((a) => this.bareAddress(a.trim()))
+      .filter((a) => a.length > 0);
+    return Array.from(new Set([...(primary ? [primary] : []), ...aliases]));
+  }
+
+  /** Reduce "Display Name <user@host>" (or a bare address) to lowercase user@host. */
+  private bareAddress(value: string): string {
+    const match = value.match(/<([^>]+)>/);
+    return (match ? match[1] : value).trim().toLowerCase();
+  }
+
+  /**
+   * True when the email was actually addressed TO the configured Help Desk
+   * receiving address (To / Cc / Delivered-To), regardless of who sent it.
+   */
+  public isAddressedToHelpdesk(email: ParsedEmail): boolean {
+    const helpdesk = this.getHelpdeskAddresses();
+    if (helpdesk.length === 0) {
+      // No configured receiving address — fail open so ingestion is not broken.
+      console.warn('No Help Desk receiving address configured (EMAIL_IMAP_USER); accepting email');
+      return true;
+    }
+    return email.recipients.some(
+      (r) => helpdesk.includes(r.toLowerCase())
+    );
+  }
+
+  /**
    * Parse raw email into structured format
    */
   private async parseEmail(rawEmail: any): Promise<ParsedEmail> {
@@ -139,6 +286,7 @@ export class EmailService {
 
     return {
       from: this.normalizeFrom(parsed.from),
+      recipients: this.extractRecipients(parsed, headers),
       subject: parsed.subject || '(No Subject)',
       text: parsed.text || '',
       html: parsed.html || undefined,
@@ -352,6 +500,10 @@ export class EmailService {
       senderName,
       senderEmail,
       reporterId: userId,
+      // The email flow performs AI-verified, email-aware resolution in
+      // sendAutoResponse (below); skip the KB auto-resolve here so the ticket
+      // is never marked RESOLVED before the customer's solution is emailed.
+      skipAutoResolve: true,
     });
 
     return ticket;
@@ -373,19 +525,53 @@ export class EmailService {
     ticketId: string
   ): Promise<void> {
     try {
-      const html = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2>Thank you for your submission</h2>
-          <p>Your ticket has been created. We will respond to your inquiry shortly.</p>
-        </div>
-      `;
-
-      const emailSubject = `Re: ${subject} (Ticket #${ticketId})`;
-
       if (!process.env.RESEND_API_KEY) {
         console.log('RESEND_API_KEY not configured, skipping auto-response email');
         return;
       }
+
+      // Load the freshly created ticket — its title/description feed the
+      // knowledge-base lookup and the AI verification step.
+      const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
+      if (!ticket) {
+        console.warn(`sendAutoResponse: ticket ${ticketId} not found, skipping`);
+        return;
+      }
+      const title = ticket.title;
+      const description = ticket.description || '';
+
+      // ── Knowledge base match + AI verification ─────────────────────
+      let html: string | null = null;
+      let canResolve = false;
+      let kbEntry: KnowledgeBaseEntry | null = null;
+      let decision: AIResolutionDecision | null = null;
+
+      try {
+        kbEntry = knowledgeBaseService.findMatchingEntry(title, description);
+        if (kbEntry) {
+          decision = await resolveTicketWithAI(title, description, kbEntry);
+          if (
+            decision.canResolve &&
+            decision.confidence >= AI_RESOLUTION_CONFIDENCE_THRESHOLD &&
+            decision.solution.trim().length > 0
+          ) {
+            canResolve = true;
+            html = buildSolutionEmail(decision);
+          }
+        }
+      } catch (aiError) {
+        // Gemini failure / timeout / quota error: log safely, keep the
+        // ticket OPEN, and never crash email ingestion.
+        console.error(`AI auto-resolution check failed for ticket ${ticketId}:`, aiError);
+      }
+
+      if (!html) {
+        // No reliable knowledge-base solution — send the professional
+        // fallback. The ticket intentionally stays OPEN.
+        html = buildFallbackEmail();
+      }
+
+      const emailSubject = `Re: ${subject}`;
 
       // Threading headers: reply to the latest inbound email on this ticket.
       const lastEmail = await prisma.emailMessage.findFirst({
@@ -447,6 +633,38 @@ export class EmailService {
           console.error(`Failed to mark auto-response EmailMessage SENT for ticket ${ticketId}:`, err);
         });
         console.log(`Auto-response sent via Resend for ticket ${ticketId} (email id: ${result.emailId})`);
+
+        // The email was delivered: only NOW store the customer-facing reply
+        // and mark the ticket RESOLVED. This only happens when the knowledge
+        // base contained a verified solution (canResolve === true).
+        if (canResolve && decision && kbEntry) {
+          try {
+            const aiAgent = await getOrCreateAIAgent();
+            await prisma.reply.create({
+              data: {
+                body: [decision.solution, decision.verification]
+                  .filter((s) => s && s.trim().length > 0)
+                  .join('\n\n'),
+                ticketId,
+                authorId: aiAgent.id,
+                senderType: 'AGENT',
+              },
+            });
+            await prisma.ticket.update({
+              where: { id: ticketId },
+              data: {
+                status: 'RESOLVED',
+                resolvedByAI: true,
+                resolvedAt: new Date(),
+                assigneeId: aiAgent.id, // Assign to the existing AI agent
+              },
+            });
+            console.log(`Ticket ${ticketId} auto-resolved using knowledge base: ${kbEntry.title}`);
+          } catch (dbError) {
+            // Never crash email ingestion on reply/status persistence issues.
+            console.error(`Failed to record AI resolution for ticket ${ticketId}:`, dbError);
+          }
+        }
         return;
       }
       if (!result.emailId) {
@@ -633,11 +851,16 @@ export class EmailService {
    */
   private async processEmail(
     connection: any,
-    email: any
+    email: any,
+    rawEmail?: Buffer | string
   ): Promise<void> {
     try {
-      // Parse the email
-      const parsedEmail = await this.parseEmail(email);
+      // Parse the email (raw RFC822 content fetched via bodies: [''])
+      if (!rawEmail) {
+        console.warn('No raw email content available, skipping');
+        return;
+      }
+      const parsedEmail = await this.parseEmail(rawEmail);
 
       // Extract sender info
       const from = parsedEmail.from[0];
@@ -674,6 +897,17 @@ export class EmailService {
 
       // Thread matching: does this email belong to an existing conversation?
       const threadMatch = await this.findThreadMatch(parsedEmail);
+
+      // Recipient filter: ignore unrelated emails that merely arrived UNSEEN
+      // in the polled mailbox (security notifications, newsletters, etc.).
+      // Existing threaded conversations are always accepted.
+      if (!threadMatch && !this.isAddressedToHelpdesk(parsedEmail)) {
+        console.log('Ignoring email: not addressed to configured Help Desk address');
+        if (email.attributes && email.attributes.uid) {
+          await this.markAsSeen(connection, email.attributes.uid);
+        }
+        return;
+      }
 
       if (threadMatch) {
         // Customer reply to an existing ticket - do NOT create a new ticket
@@ -753,9 +987,13 @@ export class EmailService {
         });
       });
 
-      // Search for unseen emails
+      // Search for unseen emails.
+      // bodies: [''] fetches the complete raw RFC822 message, which is what
+      // mailparser's simpleParser() expects (a Buffer/string/stream). Fetching
+      // 'HEADER'/'TEXT' returns structured objects that cause
+      // "TypeError: input.once is not a function" inside mailparser.
       const searchCriteria = ['UNSEEN'];
-      const fetchOptions = { bodies: ['HEADER', 'TEXT'] };
+      const fetchOptions = { bodies: [''] };
 
       const messages = await connection.search(searchCriteria, fetchOptions);
 
@@ -768,7 +1006,13 @@ export class EmailService {
       // Process each email
       for (const message of messages) {
         try {
-          await this.processEmail(connection, message);
+          // Extract the raw full-message body part returned by imap-simple
+          const rawPart = message.parts?.find(
+            (part: any) => part.which === ''
+          );
+          // imap-simple exposes the fetched body as `part.body`
+          const rawEmail: Buffer | string | undefined = rawPart?.body;
+          await this.processEmail(connection, message, rawEmail);
           processedCount++;
         } catch (error) {
           console.error('Error processing individual email:', error);

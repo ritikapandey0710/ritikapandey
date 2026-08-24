@@ -20,6 +20,7 @@ import {
   getCategoryLabel,
 } from '@/utils/ticketUtils';
 import UpdateTicket from '../components/tickets/UpdateTicket';
+import DeleteTicket from '../components/tickets/DeleteTicket';
 import { ReplyThread } from '../components/replies/ReplyThread';
 import { ReplyForm } from '../components/replies/ReplyForm';
 import { ChevronLeft, Sparkles } from 'lucide-react';
@@ -119,6 +120,13 @@ export default function TicketDetailsPage() {
 
   const handleBack = () => {
     navigate(-1);
+  };
+
+  // Called by the admin-only DeleteTicket section once the backend has
+  // confirmed deletion; refresh lists and return to the Tickets page.
+  const handleTicketDeleted = () => {
+    queryClient.invalidateQueries({ queryKey: ['tickets'] });
+    navigate('/tickets');
   };
 
   const handleSaveChanges = async (payload: {
@@ -409,6 +417,11 @@ export default function TicketDetailsPage() {
             </div>
           </div>
         </div>
+
+        {/* Danger Zone — visible to administrators only */}
+        {isAdmin && (
+          <DeleteTicket ticketId={ticket.id} onDeleted={handleTicketDeleted} />
+        )}
 
         {/* AI Summary Section */}
       {ticket && (

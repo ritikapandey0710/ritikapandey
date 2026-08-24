@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-interface KnowledgeBaseEntry {
+export interface KnowledgeBaseEntry {
   id: string;
   title: string;
   category: string;
@@ -163,6 +163,16 @@ class KnowledgeBaseService {
 
     // Only return match if score is above threshold
     return highestScore >= 35 ? bestMatch : null;
+  }
+
+    /** Returns all loaded KB entries (read-only view for testing/debugging). */
+  public getEntries(): KnowledgeBaseEntry[] {
+    return [...this.entries];
+  }
+
+  /** Look up a single KB entry by its generated id. */
+  public getEntryById(id: string): KnowledgeBaseEntry | null {
+    return this.entries.find((e) => e.id === id) ?? null;
   }
 
   public getResolutionSteps(entry: KnowledgeBaseEntry): string {

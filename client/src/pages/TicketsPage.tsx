@@ -8,6 +8,8 @@ import { z } from 'zod';
 import { TicketStatus, TicketCategory, TicketPriority, TICKET_STATUSES, TICKET_CATEGORIES, TICKET_PRIORITIES } from '../types/ticket';
 import { ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import DeleteTicket from '../components/tickets/DeleteTicket';
+import { UserRole } from '../types/role';
 import {
   useReactTable,
   getCoreRowModel,
@@ -239,9 +241,18 @@ const filterOpt = (name: string): FilterFnOption<any> => name as any;
 export default function TicketsPage() {
   const { data: session, isPending: authPending } = authClient.useSession();
   const enabled = !authPending && !!session;
+  // better-auth's client session type omits the DB `role` field; cast like TicketDetailsPage does.
+  const isAdmin = (session?.user as { role?: string } | undefined)?.role === UserRole.ADMIN;
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const handleClose = useCallback(() => setIsModalOpen(false), []);
+
+  // After an admin deletes a ticket, refresh the list and the dashboard
+  // counts so the removed ticket disappears everywhere.
+  const handleTicketDeleted = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['tickets'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+  }, [queryClient]);
 
   // Table state for sorting
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -468,10 +479,17 @@ export default function TicketsPage() {
             </svg>
             View
           </button>
+          {isAdmin && (
+            <DeleteTicket
+              ticketId={row.original.id as string}
+              onDeleted={handleTicketDeleted}
+              variant="icon"
+            />
+          )}
         </div>
       )
     }
-  ], []);
+  ], [isAdmin, handleTicketDeleted]);
 
   // Build column filters from the dropdown states
   const columnFilters = useMemo<ColumnFiltersState>(() => {

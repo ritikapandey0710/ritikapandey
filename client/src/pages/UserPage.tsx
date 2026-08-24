@@ -170,7 +170,10 @@ function UserModal({
         </div>
 
         {/* Body */}
-        <form onSubmit={handleSubmit(onSubmit)} className="px-6 py-5 space-y-4">
+        {/* noValidate: validation is handled by react-hook-form + zod,
+            so native browser constraint validation must not block submits
+            (it also blocks them in jsdom-based tests). */}
+        <form noValidate onSubmit={handleSubmit(onSubmit)} className="px-6 py-5 space-y-4">
           {apiError && (
             <div className="flex items-start gap-2 p-3 rounded-xl bg-red-50 border border-red-100 text-red-700 text-sm">
               <svg className="w-4 h-4 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">

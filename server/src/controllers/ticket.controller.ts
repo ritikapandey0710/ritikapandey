@@ -175,10 +175,28 @@ export async function updateTicket(req: any, res: any) {
 export async function deleteTicket(req: any, res: any) {
   const { id } = req.params;
 
-  const existing = await prisma.ticket.findUnique({ where: { id } });
+  const existing = await prisma.ticket.findUnique({ where: { id }, select: { id: true } });
   if (!existing) return res.status(404).json({ error: "Ticket not found" });
 
-  await prisma.ticket.delete({ where: { id } });
+  // Defense-in-depth: the route middleware already enforces ADMIN, but the
+  // controller must never rely solely on wiring for destructive actions.
+  if ((req as any).user?.role !== "ADMIN") {
+    return res.status(403).json({ error: "Forbidden: Admin access required" });
+  }
+
+  // The Prisma schema declares no cascading deletes, so related records MUST
+  // be removed explicitly in dependency order (emailMessages reference both
+  // ticketId and replyId) to preserve database integrity.
+  try {
+    await prisma.$transaction([
+      prisma.emailMessage.deleteMany({ where: { ticketId: id } }),
+      prisma.reply.deleteMany({ where: { ticketId: id } }),
+      prisma.ticket.delete({ where: { id } }),
+    ]);
+  } catch (error) {
+    console.error("Failed to delete ticket:", error);
+    return res.status(500).json({ error: "Failed to delete ticket" });
+  }
 
   res.json({ message: "Ticket deleted successfully" });
 }

@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import UserPage from './UserPage';
 import { authClient } from '../lib/auth-client';
@@ -107,7 +107,7 @@ describe('UserPage', () => {
     await waitFor(() => {
       const state = queryClient.getQueryState(['users']);
       console.log('Query state while waiting:', state);
-      return state?.status !== 'pending';
+      return !!state && state.status !== 'pending';
     }, { timeout: 5000 }); // Increase timeout for debugging
 
     // Now check the state
@@ -255,7 +255,7 @@ describe('UserPage', () => {
     await userEvent.click(createBtn);
     expect(screen.getByText(/create new user/i)).toBeInTheDocument();
 
-    await userEvent.keyboard({ key: 'Escape' });
+    await userEvent.keyboard('{Escape}');
 
     // Wait for modal to close
     await waitFor(() => {
@@ -283,14 +283,16 @@ describe('UserPage', () => {
     // Fill in invalid data
     const nameInput = screen.getByPlaceholderText(/enter full name/i);
     const emailInput = screen.getByPlaceholderText(/enter email address/i);
-    const _passwordInput = screen.getByPlaceholderText(/min. 8 characters/i);
+    const passwordInput = screen.getByPlaceholderText(/min. 8 characters/i);
 
     await userEvent.type(nameInput, 'Jo'); // too short
     await userEvent.type(emailInput, 'invalid'); // invalid email
     await userEvent.type(passwordInput, '1234567'); // too short
 
-    // Submit the form
-    const submitBtn = screen.getByRole('button', { name: /create user/i });
+    // Submit the form (scoped to the modal form: the page header also has a
+    // "Create User" button)
+    const modalForm = screen.getByPlaceholderText(/enter full name/i).closest('form') as HTMLFormElement;
+    const submitBtn = within(modalForm).getByRole('button', { name: /create user/i });
     await userEvent.click(submitBtn);
 
     // Check for validation errors
@@ -323,14 +325,16 @@ describe('UserPage', () => {
     // Fill in valid data
     const nameInput = screen.getByPlaceholderText(/enter full name/i);
     const emailInput = screen.getByPlaceholderText(/enter email address/i);
-    const _passwordInput = screen.getByPlaceholderText(/min. 8 characters/i);
+    const passwordInput = screen.getByPlaceholderText(/min. 8 characters/i);
 
     await userEvent.type(nameInput, 'John Doe');
     await userEvent.type(emailInput, 'john@example.com');
     await userEvent.type(passwordInput, 'password123');
 
-    // Submit the form
-    const submitBtn = screen.getByRole('button', { name: /create user/i });
+    // Submit the form (scoped to the modal form: the page header also has a
+    // "Create User" button)
+    const modalForm = screen.getByPlaceholderText(/enter full name/i).closest('form') as HTMLFormElement;
+    const submitBtn = within(modalForm).getByRole('button', { name: /create user/i });
     await userEvent.click(submitBtn);
 
     // Wait for modal to close
@@ -390,7 +394,7 @@ describe('UserPage', () => {
     expect(screen.getByText(/edit user/i)).toBeInTheDocument();
 
     // Click on the backdrop to close the modal
-    const backdrop = screen.getByTestId('backdrop-edit');
+    const backdrop = screen.getByTestId('backdrop');
     expect(backdrop).toBeInTheDocument();
     await userEvent.click(backdrop);
 
@@ -419,7 +423,7 @@ describe('UserPage', () => {
     await userEvent.click(editBtn as HTMLElement);
     expect(screen.getByText(/edit user/i)).toBeInTheDocument();
 
-    await userEvent.keyboard({ key: 'Escape' });
+    await userEvent.keyboard('{Escape}');
 
     // Wait for modal to close
     await waitFor(() => {
@@ -454,7 +458,7 @@ describe('UserPage', () => {
 
     const nameInput = screen.getByPlaceholderText(/enter full name/i);
     const emailInput = screen.getByPlaceholderText(/enter email address/i);
-    const _passwordInput = screen.getByPlaceholderText(/min. 8 characters/i);
+    const passwordInput = screen.getByPlaceholderText(/min. 8 characters/i);
 
     await userEvent.clear(nameInput);
     await userEvent.type(nameInput, 'Jonathan Doe');
@@ -506,9 +510,12 @@ describe('UserPage', () => {
 
     const nameInput = screen.getByPlaceholderText(/enter full name/i);
     const emailInput = screen.getByPlaceholderText(/enter email address/i);
-    const _passwordInput = screen.getByPlaceholderText(/min. 8 characters/i);
+    const passwordInput = screen.getByPlaceholderText(/min. 8 characters/i);
 
+    // The edit form is prefilled with the user's current values — replace them.
+    await userEvent.clear(nameInput);
     await userEvent.type(nameInput, 'John Doe');
+    await userEvent.clear(emailInput);
     await userEvent.type(emailInput, 'john@example.com');
     await userEvent.type(passwordInput, 'newpassword123');
 
@@ -552,9 +559,12 @@ describe('UserPage', () => {
     // Fill in invalid data
     const nameInput = screen.getByPlaceholderText(/enter full name/i);
     const emailInput = screen.getByPlaceholderText(/enter email address/i);
-    const _passwordInput = screen.getByPlaceholderText(/min. 8 characters/i);
+    const passwordInput = screen.getByPlaceholderText(/min. 8 characters/i);
 
+    // The edit form is prefilled — clear before typing invalid values.
+    await userEvent.clear(nameInput);
     await userEvent.type(nameInput, 'Jo'); // too short
+    await userEvent.clear(emailInput);
     await userEvent.type(emailInput, 'invalid'); // invalid email
     await userEvent.type(passwordInput, '1234567'); // too short
 
@@ -595,7 +605,7 @@ describe('UserPage', () => {
 
     const nameInput = screen.getByPlaceholderText(/enter full name/i);
     const emailInput = screen.getByPlaceholderText(/enter email address/i);
-    const _passwordInput = screen.getByPlaceholderText(/min. 8 characters/i);
+    const passwordInput = screen.getByPlaceholderText(/min. 8 characters/i);
 
     await userEvent.clear(nameInput);
     await userEvent.type(nameInput, 'Jonathan Doe');

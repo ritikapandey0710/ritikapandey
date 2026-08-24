@@ -14,8 +14,18 @@ export interface ProcessNewTicketInput {
   reporterId?: string | null;
   /** Preferred assignee if AI agent is unavailable */
   fallbackAssigneeId?: string | null;
-  /** Send the "ticket created" notification email to the sender */
+    /** Send the "ticket created" notification email to the sender */
   sendCreatedNotification?: boolean;
+  /**
+   * When true, skips the knowledge-base auto-resolution section so that the
+   * caller (e.g. sendAutoResponse in the email-ingestion path) can perform
+   * AI-verified, email-aware resolution and avoid marking the ticket RESOLVED
+   * before the customer's solution email has been sent.
+   *
+   * API and webhook callers leave this undefined (false) so that the existing
+   * KB auto-resolution behaviour is preserved for those entry points.
+   */
+  skipAutoResolve?: boolean;
 }
 
 /**
@@ -40,6 +50,7 @@ export async function processNewTicket(input: ProcessNewTicketInput) {
     reporterId,
     fallbackAssigneeId,
     sendCreatedNotification = false,
+    skipAutoResolve = false,
   } = input;
 
   // Find or create the AI agent to assign this ticket to
@@ -85,10 +96,14 @@ export async function processNewTicket(input: ProcessNewTicketInput) {
     data: { status: "PROCESSING" },
   });
 
-  // Check knowledge base for auto-resolution
-  try {
-    const kbEntry = knowledgeBaseService.findMatchingEntry(title, description || "");
-    if (kbEntry) {
+    // Check knowledge base for auto-resolution
+  // Skip when the caller (e.g. email sendAutoResponse) wants to perform
+  // AI-verified, email-aware resolution itself, so the ticket is not marked
+  // RESOLVED before the customer's solution email is sent.
+    if (!skipAutoResolve) {
+    try {
+      const kbEntry = knowledgeBaseService.findMatchingEntry(title, description || "");
+      if (kbEntry) {
       // Auto-resolve the ticket - keep assigned to AI, mark as AI-resolved
       await prisma.ticket.update({
         where: { id: ticket.id },
@@ -135,7 +150,7 @@ export async function processNewTicket(input: ProcessNewTicketInput) {
         assigneeId: null, // Unassign from AI agent
       },
     });
-  } catch (kbError) {
+      } catch (kbError) {
     console.error(`Knowledge base check failed for ticket ${ticket.id}:`, kbError);
     // Even if knowledge base check fails, mark as open for human handling
     // and unassign from AI agent
@@ -146,7 +161,20 @@ export async function processNewTicket(input: ProcessNewTicketInput) {
         assigneeId: null, // Unassign from AI agent
       },
     });
-  }
+    }
+    } else {
+      // skipAutoResolve is true — KB resolution is deferred to the email
+      // sendAutoResponse flow (AI-verified, email-aware resolution).
+      // Set ticket to OPEN so it is visible to agents and ready for
+      // sendAutoResponse to resolve.
+      await prisma.ticket.update({
+        where: { id: ticket.id },
+        data: {
+          status: "OPEN",
+          assigneeId: null,
+        },
+      });
+    }
 
   // Fire off AI classification in the background (do not await)
   const { classifyTicket } = await import('../controllers/ai.controller');
@@ -171,14 +199,21 @@ export async function processNewTicket(input: ProcessNewTicketInput) {
       // If the AI text generation threw, do not leave the ticket stuck in its
       // processing/AI state. Reset ONLY the status to OPEN and unassign from AI
       // (all other fields are left untouched) so it is visible to human agents.
+      // Guard against overriding a ticket that was already RESOLVED by the
+      // AI-powered email auto-response flow (sendAutoResponse).
       prisma.ticket.update({
-        where: { id: ticket.id },
+        where: { id: ticket.id, status: { not: "RESOLVED" } },
         data: {
           status: "OPEN",
           assigneeId: null, // Unassign from AI agent
         },
-      }).catch((statusUpdateError) => {
-        console.error(`Failed to reset ticket ${ticket.id} status to OPEN after AI classification failure:`, statusUpdateError);
+      }).catch((statusUpdateError: any) => {
+        // P2025 = record not found (the ticket was already RESOLVED, so our
+        // guard clause correctly prevented the update). Silence this; any
+        // other error is unexpected and worth logging.
+        if (statusUpdateError?.code !== "P2025") {
+          console.error(`Failed to reset ticket ${ticket.id} status to OPEN after AI classification failure:`, statusUpdateError);
+        }
       });
     });
 

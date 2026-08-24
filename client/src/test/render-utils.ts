@@ -1,47 +1,71 @@
 import { RenderResult, render } from '@testing-library/react';
-import type { ReactElement, ReactNode } from 'react';
+import type { ReactElement } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import * as ReactQuery from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import React from 'react';
 
-// Create a query client for tests
-export const createTestQueryClient = () => new QueryClient();
+/**
+ * Create a QueryClient suitable for tests: no retries so error states appear
+ * immediately.
+ */
+export function createTestQueryClient(): QueryClient {
+  return new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+}
+
+interface RenderWithQueryOptions {
+  /**
+   * Optional QueryClient. For convenience, a partial mock containing only
+   * spies (e.g. `{ invalidateQueries: vi.fn() }`) is also accepted: it is
+   * backed by a real QueryClient and `invalidateQueries` calls are delegated
+   * to the provided spy so assertions like
+   * `expect(queryClient.invalidateQueries).toHaveBeenCalledWith(...)` work.
+   */
+  queryClient?: QueryClient | { invalidateQueries?: (...args: any[]) => unknown };
+  /** Initial route for the MemoryRouter. */
+  route?: string;
+}
 
 /**
- * Render a component with React Query providers
- * @param ui The component to render
- * @param options Additional options for the query client or testing-library render
+ * Render a component wrapped in a QueryClientProvider and MemoryRouter.
  */
-export const renderWithQuery = (
+export function renderWithQuery(
   ui: ReactElement,
-  options: {
-    queryClient?: QueryClient;
-    route?: string;
-  } = {}
-): RenderResult => {
-  const { queryClient: customQueryClient, route } = options;
-  const queryClient = customQueryClient ?? createTestQueryClient();
+  options: RenderWithQueryOptions = {}
+): RenderResult {
+  const { queryClient: provided, route } = options;
 
-  // Create initial entries for memory router
-  const initialEntries = route ? [route] : ['/'];
+  let client: QueryClient;
+  if (
+    provided &&
+    !(provided instanceof QueryClient) &&
+    typeof provided.invalidateQueries === 'function'
+  ) {
+    // Partial mock: back it with a real client and delegate invalidateQueries.
+    client = createTestQueryClient();
+    const originalInvalidate = client.invalidateQueries.bind(client);
+    const spy = provided.invalidateQueries;
+    client.invalidateQueries = ((...args: any[]) => {
+      spy(...args);
+      return originalInvalidate(
+        ...(args as Parameters<QueryClient['invalidateQueries']>)
+      );
+    }) as QueryClient['invalidateQueries'];
+  } else if (provided instanceof QueryClient) {
+    client = provided;
+  } else {
+    client = createTestQueryClient();
+  }
 
-  const Wrapper: React.FC<{ children: ReactNode }> = ({ children }) => {
-    // Use MockedProvider if available, otherwise pass through children
-    const MockedProviderComponent = ReactQuery.MockedProvider || ((props: { children: ReactNode }) => {
-      return React.createElement(React.Fragment, null, props.children);
-    });
-
-    return React.createElement(
+  return render(
+    React.createElement(
       QueryClientProvider,
-      { client: queryClient },
-      React.createElement(
-        MemoryRouter,
-        { initialEntries },
-        React.createElement(MockedProviderComponent, null, children)
-      )
-    );
-  };
-
-  return render(ui, { wrapper: Wrapper });
-};
+      { client },
+      React.createElement(MemoryRouter, { initialEntries: [route ?? '/'] }, ui)
+    )
+  );
+}

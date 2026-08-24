@@ -509,8 +509,9 @@ describe('TicketDetailsPage', () => {
     const sendButton = screen.getByRole('button', { name: /send reply/i });
     await userEvent.click(sendButton);
 
-    // Verify createReply was called
-    expect(mocks.createReply).toHaveBeenCalledWith('1', { body: 'My new reply' });
+    // Verify createReply was called (ReplyForm prefixes the customer's
+    // first name as a greeting)
+    expect(mocks.createReply).toHaveBeenCalledWith('1', { body: 'Hi John, My new reply' });
 
     // Reply composer must still be visible
     expect(screen.getByTestId('reply-composer')).toBeInTheDocument();
