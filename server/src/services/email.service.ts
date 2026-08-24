@@ -7,6 +7,7 @@ import { sendEmailWithRetry } from './resend.service';
 import { knowledgeBaseService, type KnowledgeBaseEntry } from './knowledgeBaseService';
 import { resolveTicketWithAI, type AIResolutionDecision } from '../controllers/ai.controller';
 import { getOrCreateAIAgent } from './aiAgentService';
+import { captureServerError } from '../lib/sentry';
 
 interface EmailOptions {
   imap?: {
@@ -561,8 +562,14 @@ export class EmailService {
         }
       } catch (aiError) {
         // Gemini failure / timeout / quota error: log safely, keep the
-        // ticket OPEN, and never crash email ingestion.
+        // ticket OPEN, and never crash email ingestion. Sentry only observes
+        // (no behavior change); safe context tags only — no ticket bodies.
         console.error(`AI auto-resolution check failed for ticket ${ticketId}:`, aiError);
+        captureServerError(aiError, {
+          service: "ai",
+          operation: "auto-resolution",
+          ticketId,
+        });
       }
 
       if (!html) {

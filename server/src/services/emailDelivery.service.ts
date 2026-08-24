@@ -1,4 +1,5 @@
 import { prisma } from "../lib/prisma";
+import { captureServerError } from "../lib/sentry";
 import { sendEmailWithRetry } from "./resend.service";
 
 /**
@@ -75,6 +76,7 @@ export async function processDueEmails(now: Date = new Date()): Promise<number> 
         `emailDelivery.worker: unexpected error processing EmailMessage ${row.id}:`,
         error
       );
+      captureServerError(error, { service: "email-delivery", operation: "worker" });
     }
   }
 

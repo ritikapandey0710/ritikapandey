@@ -1,4 +1,8 @@
-import "dotenv/config";
+// EARLY INSTRUMENTATION: must be the first import so @sentry/node is
+// initialized before any application module loads (Sentry recommended
+// pattern). See src/instrument.ts. Initialization itself is guarded inside
+// lib/sentry.ts, so Sentry.init runs exactly once per process.
+import "./instrument";
 console.log('DEBUG: index.ts loaded');
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
@@ -15,6 +19,14 @@ import { EmailService } from "./services/email.service";
 import { verifyWebhookSignature } from "./middleware/webhook.middleware";
 import { verifyResendWebhookSignature } from "./middleware/resendWebhook.middleware";
 import { startDeliveryWorker } from "./services/emailDelivery.service";
+import { captureServerError, attachExpressErrorHandler } from "./lib/sentry";
+
+// Report unhandled promise rejections to Sentry without changing behavior.
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled promise rejection:", reason);
+  captureServerError(reason, { operation: "unhandledRejection" });
+});
+
 
 console.log("Server starting..."); // Debug line
 
@@ -133,7 +145,16 @@ app.use((_req: Request, res: Response) => {
   res.status(404).json({ error: "Not found" });
 });
 
-// Global error handler
+
+// Sentry Express error handler: per Sentry's recommended ordering it is
+// registered AFTER all routes/controllers (and the 404 handler) and BEFORE
+// the final fallback error middleware. It only observes errors and forwards
+// them via next(err) — responses are produced by the fallback below, unchanged.
+attachExpressErrorHandler(app);
+
+// Global (final/fallback) error handler. Existing response format is fully
+// preserved. Capturing is handled by Sentry's Express error middleware above,
+// so we do NOT call captureServerError here (avoids duplicate events).
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   console.error("Unhandled error:", err);
   res.status(500).json({ error: "Internal server error" });
@@ -201,11 +222,13 @@ const startEmailService = async () => {
         await emailService.checkForNewEmails();
       } catch (error) {
         console.error('Error during email polling:', error);
+        captureServerError(error, { service: "email", operation: "polling" });
       }
     }, pollInterval);
 
   } catch (error) {
     console.error('Failed to start email service:', error);
+    captureServerError(error, { service: "email", operation: "initialize" });
     // Don't crash the server if email service fails
   }
 };
