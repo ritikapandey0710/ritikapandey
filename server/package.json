@@ -17,7 +17,7 @@
     "@types/node": "^20.14.2",
     "@types/nodemailer": "^8.0.1",
     "prisma": "^7.8.0",
-    "typescript": "^7.0.2"
+    "typescript": "~6.0.2"
   },
   "dependencies": {
     "@better-auth/prisma-adapter": "1.6.11",
