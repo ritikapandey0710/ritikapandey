@@ -1,0 +1,21 @@
+node_modules
+dist
+.out
+.err
+*.log
+.env
+.env.*
+!client/.env.example
+!server/.env.example
+Dockerfile
+.dockerignore
+railway.json
+.git
+.gitignore
+npm-debug.log
+README.md
+# Ignore any local env files that might contain secrets
+*.env
+
+# Exclude node_modules directories at any level
+**/node_modules

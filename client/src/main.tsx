@@ -6,30 +6,33 @@ import React from 'react'
 import App from './App'
 import { initSentry, SentryErrorBoundary } from './lib/sentry'
 
-// Initialize Sentry error monitoring before rendering. No-op without DSN.
-initSentry();
+// Initialize Sentry
+initSentry()
+
+// Theme initialization: detect system preference or use saved preference
+const initializeTheme = () => {
+  const savedTheme = localStorage.getItem('theme')
+  if (savedTheme) {
+    document.documentElement.classList.toggle('dark', savedTheme === 'dark')
+  } else {
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+    document.documentElement.classList.toggle('dark', prefersDark)
+  }
+}
+
+// Initialize theme on initial load
+initializeTheme()
 
 const queryClient = new QueryClient();
 
-// Simple fallback UI shown when an uncaught React render error occurs.
-const ErrorFallback = () => (
-  <div className="flex items-center justify-center min-h-screen bg-slate-50">
-    <div className="text-center">
-      <h1 className="text-xl font-semibold text-slate-800">Something went wrong</h1>
-      <p className="mt-2 text-sm text-slate-500">Please refresh the page.</p>
-    </div>
-  </div>
-);
-
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <SentryErrorBoundary fallback={<ErrorFallback />}>
-      <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <SentryErrorBoundary>
           <App />
-        </BrowserRouter>
-      </QueryClientProvider>
-    </SentryErrorBoundary>
+        </SentryErrorBoundary>
+      </BrowserRouter>
+    </QueryClientProvider>
   </React.StrictMode>
 )
-

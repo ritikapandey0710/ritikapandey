@@ -246,7 +246,7 @@ export default function TicketsPage() {
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const handleClose = useCallback(() => setIsModalOpen(false), []);
-  
+
   // After an admin deletes a ticket, refresh the list and the dashboard
   // counts so the removed ticket disappears everywhere.
   const handleTicketDeleted = useCallback(() => {

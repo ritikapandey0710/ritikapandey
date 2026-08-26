@@ -20,6 +20,7 @@ import { verifyWebhookSignature } from "./middleware/webhook.middleware";
 import { verifyResendWebhookSignature } from "./middleware/resendWebhook.middleware";
 import { startDeliveryWorker } from "./services/emailDelivery.service";
 import { captureServerError, attachExpressErrorHandler } from "./lib/sentry";
+import path from "path";
 
 // Report unhandled promise rejections to Sentry without changing behavior.
 process.on("unhandledRejection", (reason) => {
@@ -47,7 +48,13 @@ app.use(
       "http://localhost:5174",
       "http://127.0.0.1:5173",
       "http://127.0.0.1:5174",
-    ],
+      // Railway domain - will be set via environment variable
+      process.env.RAILWAY_STATIC_URL,
+      // Alternative: Public domain for Railway
+      process.env.PUBLIC_DOMAIN,
+      // Fallback for development
+      "http://localhost:5173"
+    ].filter(Boolean) as string[], // Remove falsy values
     credentials: true,
   })
 );
@@ -84,8 +91,20 @@ app.use(
 console.log('Mounting auth middleware at /api/auth');
 app.use("/api/auth", toNodeHandler(auth));
 
-app.get("/", (_req: Request, res: Response) => {
-  res.json({ message: "Help Desk API" });
+// Debug route to test auth API directly
+app.get("/debug/auth-test", async (_req, res) => {
+  try {
+    const result = await auth.api.signUpEmail({
+      body: {
+        email: "debug@example.com",
+        password: "debug123",
+        name: "Debug User"
+      }
+    });
+    res.json({ success: !!result, data: result });
+  } catch (e: unknown) {
+    res.status(500).json({ message: e instanceof Error ? e.message : String(e) });
+  }
 });
 
 // Test route to see if server is responding
@@ -140,17 +159,19 @@ app.use("/api/dashboard", async (req: Request, res: Response, next: NextFunction
 });
 app.use("/api/dashboard", dashboardRouter);
 
+// Serve static files from the React app
+app.use(express.static(path.join(__dirname, '../../client/dist')));
+
+// Always return the index.html for routes not handled by the API or static files
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../../client/dist', 'index.html'));
+});
+
 // 404 handler
 app.use((_req: Request, res: Response) => {
   res.status(404).json({ error: "Not found" });
 });
 
-
-// Sentry Express error handler: per Sentry's recommended ordering it is
-// registered AFTER all routes/controllers (and the 404 handler) and BEFORE
-// the final fallback error middleware. It only observes errors and forwards
-// them via next(err) — responses are produced by the fallback below, unchanged.
-attachExpressErrorHandler(app);
 
 // Global (final/fallback) error handler. Existing response format is fully
 // preserved. Capturing is handled by Sentry's Express error middleware above,

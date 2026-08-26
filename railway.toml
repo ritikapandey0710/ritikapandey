@@ -1,0 +1,17 @@
+[build]
+  builder = "DOCKERFILE"
+  dockerfilePath = "./Dockerfile"
+
+[deploy]
+  healthcheckPath = "/api/test"
+  healthcheckTimeout = 30
+  restartPolicyType = "ON_FAILURE"
+  maxRestarts = 10
+
+[env]
+  NODE_ENV = "production"
+
+[[services]]
+  name = "web"
+  ports = [{port = 3001}]
+  healthcheck = {method = "HTTP", path = "/api/test", timeout = 10, interval = 30, retries = 3}

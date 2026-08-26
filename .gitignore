@@ -23,3 +23,11 @@ build/
 .DS_Store
 Thumbs.db
 helpdesk_backup_before_phase2.dump
+
+# Runtime artifacts, logs, backups and temporary files
+*.err
+*.out
+*.pid
+*backup*
+test-output.txt
+temp.ts
