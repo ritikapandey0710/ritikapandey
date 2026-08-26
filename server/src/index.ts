@@ -39,7 +39,7 @@ for (const varName of requiredEnvVars) {
 }
 
 const app = express();
-const port = process.env.PORT || 3001;
+const port = Number(process.env.PORT) || 3001;
 
 app.use(
   cors({
@@ -181,8 +181,8 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   res.status(500).json({ error: "Internal server error" });
 });
 
-const server = app.listen(port, () => {
-  console.log(`Server running at http://localhost:${port}`);
+const server = app.listen(port, '0.0.0.0', () => {
+  console.log(`Server running at http://0.0.0.0:${port}`);
 });
 
 // Initialize and start email service
