@@ -12,7 +12,7 @@ if (typeof require !== 'undefined' && require.main && require.main.filename) {
   const mainFilename = require.main.filename;
   // Load dotenv only when running the main application (index.ts/index.js)
   if (mainFilename.endsWith('index.ts') || mainFilename.endsWith('index.js')) {
-    import "dotenv/config";
+    require("dotenv/config");
   }
 }
 import { initSentry } from "./lib/sentry";
