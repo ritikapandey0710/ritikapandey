@@ -4,6 +4,17 @@ import { betterAuth } from "better-auth";
 
 export const auth = betterAuth({
   baseURL: (() => {
+    // Check for Railway environment variables first
+    const railwayUrl = process.env.RAILWAY_STATIC_URL || process.env.PUBLIC_DOMAIN;
+    if (railwayUrl) {
+      // Ensure URL has a protocol
+      if (!railwayUrl.startsWith('http://') && !railwayUrl.startsWith('https://')) {
+        return `https://${railwayUrl}`;
+      }
+      return railwayUrl;
+    }
+
+    // Fallback to BETTER_AUTH_URL
     const envUrl = process.env.BETTER_AUTH_URL;
     if (envUrl) {
       // Ensure URL has a protocol
@@ -12,6 +23,8 @@ export const auth = betterAuth({
       }
       return envUrl;
     }
+
+    // Final fallback to localhost
     return `http://localhost:${process.env.PORT || 18080}`;
   })(),
   database: prismaAdapter(prisma, {
@@ -28,9 +41,19 @@ export const auth = betterAuth({
       "http://127.0.0.1:5174",
     ];
 
+    // Add Railway domains if available
+    const railwayUrl = process.env.RAILWAY_STATIC_URL || process.env.PUBLIC_DOMAIN;
+    if (railwayUrl) {
+      let originUrl = railwayUrl;
+      if (!originUrl.startsWith('http://') && !originUrl.startsWith('https://')) {
+        originUrl = `https://${railwayUrl}`;
+      }
+      baseUrls.push(originUrl);
+    }
+
+    // Add BETTER_AUTH_URL if available
     const envUrl = process.env.BETTER_AUTH_URL;
     if (envUrl) {
-      // Ensure URL has a protocol for trusted origins
       let originUrl = envUrl;
       if (!originUrl.startsWith('http://') && !originUrl.startsWith('https://')) {
         originUrl = `https://${envUrl}`;
