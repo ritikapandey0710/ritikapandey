@@ -3,15 +3,12 @@
 // Prisma CLI to work correctly at runtime
 import { defineConfig } from "prisma/config";
 
-const url = process.env.DATABASE_URL;
-console.log(`Prisma config: DATABASE_URL is ${url ? 'set' : 'NOT SET'}`);
-
 export default defineConfig({
   schema: "prisma/schema.prisma",
   datasources: {
     db: {
       provider: "postgresql",
-      url: url
+      url: process.env.DATABASE_URL
     }
   },
   migrations: {
