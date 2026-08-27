@@ -4,10 +4,8 @@
 
 export default {
   schema: "prisma/schema.prisma",
-  datasources: {
-    db: {
-      provider: "postgresql",
-      url: process.env.DATABASE_URL
-    }
+  datasource: {
+    provider: "postgresql",
+    url: process.env.DATABASE_URL
   }
 };
