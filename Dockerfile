@@ -3,7 +3,7 @@ FROM node:22-alpine
 WORKDIR /app
 
 # Copy package files for dependency installation
-COPY package.json ./
+COPY package.json ./ 
 COPY server/package.json ./server/
 COPY client/package.json ./client/
 
@@ -29,5 +29,5 @@ RUN npx tsc -p tsconfig.json
 EXPOSE 3001
 
 # Start the server
-WORKDIR /app
-CMD ["sh", "-c", "npx prisma migrate deploy && node server/dist/index.js"]
+WORKDIR /app/server
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
