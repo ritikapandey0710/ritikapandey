@@ -1,6 +1,7 @@
--- Create a stored function that computes all dashboard statistics in a single query.
--- This is the single authoritative source for dashboard statistics.
+-- Update the get_dashboard_stats function to use the correct timezone (Asia/Kolkata)
+-- This fixes the timezone error: time zone "Asia/Calcutta" not recognized
 
+DROP FUNCTION IF EXISTS get_dashboard_stats();
 CREATE OR REPLACE FUNCTION get_dashboard_stats()
 RETURNS TABLE (
   total_tickets BIGINT,
