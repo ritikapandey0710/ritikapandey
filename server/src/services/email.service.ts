@@ -165,8 +165,22 @@ export class EmailService {
       });
       connection.end();
       console.log('IMAP connection test successful');
-    } catch (error) {
-      throw new Error(`Failed to initialize email service: ${error}`);
+    } catch (error: any) {
+      console.error('IMAP initialization failed:', error);
+
+      if (error instanceof AggregateError) {
+        console.error('AggregateError details:');
+        for (const [index, innerError] of error.errors.entries()) {
+          console.error(`IMAP error ${index + 1}:`, {
+            name: innerError?.name,
+            message: innerError?.message,
+            code: innerError?.code,
+            stack: innerError?.stack,
+          });
+        }
+      }
+
+      throw new Error(`Failed to initialize email service: ${error?.message || error}`);
     }
   }
 
