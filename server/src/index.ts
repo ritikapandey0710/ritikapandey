@@ -229,6 +229,14 @@ const startEmailService = async () => {
       };
     }
 
+    // Log email options (non-sensitive) for debugging
+    if (emailOptions.imap) {
+      console.log(`Email service IMAP options: user=${emailOptions.imap.user}, host=${emailOptions.imap.host}, port=${emailOptions.imap.port}, tls=${emailOptions.imap.tls}, authTimeout=${emailOptions.imap.authTimeout}, rejectUnauthorized=${emailOptions.imap.rejectUnauthorized}`);
+    }
+    if (emailOptions.from) {
+      console.log(`Email service from: ${emailOptions.from}`);
+    }
+
     const emailService = new EmailService(emailOptions);
     await emailService.initialize();
 
