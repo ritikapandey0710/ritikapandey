@@ -1,5 +1,6 @@
 FROM node:22-alpine
 RUN apk add --no-cache ca-certificates
+ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
 
 WORKDIR /app
 
