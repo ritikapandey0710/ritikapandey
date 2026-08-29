@@ -17,6 +17,7 @@ interface EmailOptions {
     port: number;
     tls: boolean;
     authTimeout?: number;
+    rejectUnauthorized?: boolean;
   };
   smtp?: {
     host: string;
@@ -126,6 +127,7 @@ export class EmailService {
           port: options.imap.port,
           tls: options.imap.tls,
           authTimeout: options.imap.authTimeout || 5000,
+          rejectUnauthorized: options.imap.rejectUnauthorized,
         }
       : null;
 
@@ -876,6 +878,8 @@ export class EmailService {
     rawEmail?: Buffer | string
   ): Promise<void> {
     try {
+      // Log start of processing (non-sensitive)
+      console.log('Processing email...');
       // Parse the email (raw RFC822 content fetched via bodies: [''])
       if (!rawEmail) {
         console.warn('No raw email content available, skipping');
@@ -892,22 +896,25 @@ export class EmailService {
 
       const senderEmail = from.address;
       const senderName = from.name;
+      console.log(`Processing email from: ${senderEmail}`);
 
       // Gmail thread ID is best-effort (may be unavailable)
       parsedEmail.gmailThreadId = this.extractGmailThreadId(email);
 
       // Duplicate prevention: skip emails whose Message-ID was already processed
       if (parsedEmail.messageId) {
+        const normalizedMessageId = this.normalizeMessageId(parsedEmail.messageId);
         const existing = await prisma.emailMessage.findUnique({
-          where: { messageId: this.normalizeMessageId(parsedEmail.messageId) },
+          where: { messageId: normalizedMessageId },
           select: { id: true },
         });
         if (existing) {
           console.log(
-            `Skipping duplicate email (already processed): ${parsedEmail.messageId}`
+            `Skipping duplicate email (already processed): ${normalizedMessageId}`
           );
           if (email.attributes && email.attributes.uid) {
             await this.markAsSeen(connection, email.attributes.uid);
+            console.log(`Marked duplicate email as seen: UID ${email.attributes.uid}`);
           }
           return;
         }
@@ -915,9 +922,15 @@ export class EmailService {
 
       // Find or create user
       const userId = await this.findOrCreateUser(senderEmail, senderName);
+      console.log(`User ID for ${senderEmail}: ${userId}`);
 
       // Thread matching: does this email belong to an existing conversation?
       const threadMatch = await this.findThreadMatch(parsedEmail);
+      if (threadMatch) {
+        console.log(`Email matches existing ticket: ${threadMatch.ticketId}`);
+      } else {
+        console.log('Email does not match any existing ticket (new conversation)');
+      }
 
       // Recipient filter: ignore unrelated emails that merely arrived UNSEEN
       // in the polled mailbox (security notifications, newsletters, etc.).
@@ -926,6 +939,7 @@ export class EmailService {
         console.log('Ignoring email: not addressed to configured Help Desk address');
         if (email.attributes && email.attributes.uid) {
           await this.markAsSeen(connection, email.attributes.uid);
+          console.log(`Marked ignored email as seen: UID ${email.attributes.uid}`);
         }
         return;
       }
@@ -981,6 +995,9 @@ export class EmailService {
       // This depends on how imap-simple structures the email object
       if (email.attributes && email.attributes.uid) {
         await this.markAsSeen(connection, email.attributes.uid);
+        console.log(`Marked email as seen: UID ${email.attributes.uid}`);
+      } else {
+        console.warn('Email has no attributes or UID, cannot mark as seen');
       }
 
     } catch (error) {
@@ -1023,6 +1040,13 @@ export class EmailService {
       }
 
       console.log(`Found ${messages.length} new email(s)`);
+      // Log UIDs for debugging (non-sensitive)
+      const uids = messages
+        .map((m: any) => m.attributes?.uid)
+        .filter((uid: any): uid is number => typeof uid === 'number');
+      if (uids.length > 0) {
+        console.log(`Email UIDs: ${uids.join(', ')}`);
+      }
 
       // Process each email
       for (const message of messages) {
