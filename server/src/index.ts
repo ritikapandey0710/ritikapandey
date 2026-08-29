@@ -212,6 +212,8 @@ const startEmailService = async () => {
         port: parseInt(process.env.EMAIL_IMAP_PORT || '993', 10),
         tls: process.env.EMAIL_IMAP_TLS?.toLowerCase() === 'true' || true,
         authTimeout: parseInt(process.env.EMAIL_IMAP_AUTH_TIMEOUT || '5000', 10),
+        // Handle self-signed certificates if needed
+        rejectUnauthorized: process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0',
       },
       from: process.env.EMAIL_FROM || process.env.EMAIL_IMAP_USER!,
     };
