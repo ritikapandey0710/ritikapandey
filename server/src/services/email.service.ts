@@ -120,14 +120,19 @@ export class EmailService {
   constructor(options: EmailOptions) {
     this.imapConfig = options.imap
       ? {
-          user: options.imap.user,
-          password: options.imap.password,
-          host: options.imap.host,
-          port: options.imap.port,
+          user: options.imap.user.trim(),
+          password: options.imap.password.trim(),
+          host: options.imap.host.trim(),
+          port: parseInt(options.imap.port || '993', 10),
           tls: options.imap.tls,
           authTimeout: options.imap.authTimeout || 5000,
         }
       : null;
+
+    // Log IMAP configuration (non-sensitive) for debugging
+    if (this.imapConfig) {
+      console.log(`EmailService IMAP config: user=${this.imapConfig.user}, host=${this.imapConfig.host}, port=${this.imapConfig.port}, tls=${this.imapConfig.tls}, authTimeout=${this.imapConfig.authTimeout}, password length=${this.imapConfig.password?.length ?? 0}`);
+    }
 
     this.fromEmail = options.from;
 
