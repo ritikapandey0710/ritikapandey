@@ -211,9 +211,12 @@ const startEmailService = async () => {
         host: process.env.EMAIL_IMAP_HOST!,
         port: parseInt(process.env.EMAIL_IMAP_PORT || '993', 10),
         tls: process.env.EMAIL_IMAP_TLS?.toLowerCase() === 'true' || true,
+        tlsOptions: {
+          servername: process.env.EMAIL_IMAP_HOST!
+        },
         authTimeout: parseInt(process.env.EMAIL_IMAP_AUTH_TIMEOUT || '5000', 10),
-        // Handle self-signed certificates if needed
-        rejectUnauthorized: process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0',
+        // Note: rejectUnauthorized is intentionally omitted to rely on imap-simple defaults
+        // which properly handle TLS verification for services like Gmail
       },
       from: process.env.EMAIL_FROM || process.env.EMAIL_IMAP_USER!,
     };
@@ -231,7 +234,7 @@ const startEmailService = async () => {
 
     // Log email options (non-sensitive) for debugging
     if (emailOptions.imap) {
-      console.log(`Email service IMAP options: user=${emailOptions.imap.user}, host=${emailOptions.imap.host}, port=${emailOptions.imap.port}, tls=${emailOptions.imap.tls}, authTimeout=${emailOptions.imap.authTimeout}, rejectUnauthorized=${emailOptions.imap.rejectUnauthorized}`);
+      console.log(`Email service IMAP options: user=${emailOptions.imap.user}, host=${emailOptions.imap.host}, port=${emailOptions.imap.port}, tls=${emailOptions.imap.tls}, authTimeout=${emailOptions.imap.authTimeout}`);
     }
     if (emailOptions.from) {
       console.log(`Email service from: ${emailOptions.from}`);

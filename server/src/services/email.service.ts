@@ -17,6 +17,10 @@ interface EmailOptions {
     port: number;
     tls: boolean;
     authTimeout?: number;
+    rejectUnauthorized?: boolean;
+    tlsOptions?: {
+      servername: string;
+    };
   };
   smtp?: {
     host: string;
@@ -126,12 +130,15 @@ export class EmailService {
           port: parseInt(options.imap.port || '993', 10),
           tls: options.imap.tls,
           authTimeout: options.imap.authTimeout || 5000,
+          // Note: rejectUnauthorized is intentionally omitted to rely on imap-simple defaults
+          // which properly handle TLS verification for services like Gmail
+          ...(options.imap.tlsOptions ? { tlsOptions: options.imap.tlsOptions } : {})
         }
       : null;
 
     // Log IMAP configuration (non-sensitive) for debugging
     if (this.imapConfig) {
-      console.log(`EmailService IMAP config: user=${this.imapConfig.user}, host=${this.imapConfig.host}, port=${this.imapConfig.port}, tls=${this.imapConfig.tls}, authTimeout=${this.imapConfig.authTimeout}, password length=${this.imapConfig.password?.length ?? 0}`);
+      console.log(`EmailService IMAP config: user=${this.imapConfig.user}, host=${this.imapConfig.host}, port=${this.imapConfig.port}, tls=${this.imapConfig.tls}, authTimeout=${this.imapConfig.authTimeout}, hasTLSOptions=${!!this.imapConfig.tlsOptions}, password length=${this.imapConfig.password?.length ?? 0}`);
     }
 
     this.fromEmail = options.from;
