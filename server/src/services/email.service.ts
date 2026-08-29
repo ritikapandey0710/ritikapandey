@@ -17,7 +17,6 @@ interface EmailOptions {
     port: number;
     tls: boolean;
     authTimeout?: number;
-    rejectUnauthorized?: boolean;
   };
   smtp?: {
     host: string;
@@ -127,7 +126,6 @@ export class EmailService {
           port: options.imap.port,
           tls: options.imap.tls,
           authTimeout: options.imap.authTimeout || 5000,
-          rejectUnauthorized: options.imap.rejectUnauthorized,
         }
       : null;
 
