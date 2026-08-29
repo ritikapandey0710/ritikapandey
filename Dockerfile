@@ -30,4 +30,4 @@ EXPOSE 3001
 
 # Start the server
 WORKDIR /app/server
-CMD ["sh", "-c", "echo \"DATABASE_URL: $DATABASE_URL\" && npx prisma migrate deploy && node dist/index.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
