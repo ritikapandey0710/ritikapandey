@@ -1,0 +1,52 @@
+name: Claude Code
+
+# Controls when the workflow will run
+on:
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: 'Prompt for Claude Code to execute'
+        required: true
+        default: 'Analyze the repository and suggest improvements'
+      model:
+        description: 'Claude model to use'
+        required: false
+        default: 'claude-opus-5'
+      max_tokens:
+        description: 'Maximum tokens for response'
+        required: false
+        default: '8192'
+
+jobs:
+  claude-code:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+      
+      - name: Run Claude Code
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          claude-code \
+            --model "${{ inputs.model }}" \
+            --max-tokens "${{ inputs.max_tokens }}" \
+            "${{ inputs.prompt }}"
