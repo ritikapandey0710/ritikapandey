@@ -53,7 +53,7 @@ const createTicketSchema = z.object({
   senderName: z.string().trim().min(1, 'Sender name is required'),
   senderEmail: z.string().email('Invalid email address'),
   category: z.preprocess((v) => (v === '' ? undefined : v), z.union([z.literal('GENERAL_QUESTION'), z.literal('TECHNICAL_QUESTION'), z.literal('REFUND_REQUEST')]).optional()),
-  status: z.union([z.literal('OPEN'), z.literal('IN_PROGRESS'), z.literal('RESOLVED'), z.literal('CLOSED')]).default('OPEN'),
+  status: z.union([z.literal('NEW'), z.literal('PROCESSING'), z.literal('OPEN'), z.literal('IN_PROGRESS'), z.literal('RESOLVED'), z.literal('CLOSED')]).default('OPEN'),
 });
 
 function CreateTicketModal({ isOpen, onClose, onSuccess }: {
