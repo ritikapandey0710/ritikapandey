@@ -42,9 +42,9 @@ export const AI_RESOLUTION_CONFIDENCE_THRESHOLD = 0.85;
 /** Escape user/AI-provided text for safe embedding in an HTML email body. */
 function escapeHtml(text: string): string {
   return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/&/g, '&')
+    .replace(/</g, '<')
+    .replace(/>/g, '>');
 }
 
 /** Convert plain-text paragraphs into simple HTML blocks for email bodies. */
@@ -222,7 +222,7 @@ export class EmailService {
     }
   }
 
-    /**
+  /**
    * Connect to IMAP server
    */
   private async connectIMAP(): Promise<any> {
@@ -675,7 +675,7 @@ export class EmailService {
       // This happens AFTER sending email so ticket resolution depends on successful delivery
       // Note: The actual reply creation and ticket update happens after email sending
 
-const emailSubject = `Re: ${subject}`;
+      const emailSubject = `Re: ${subject}`;
 
       // Threading headers: reply to the latest inbound email on this ticket.
       const lastEmail = await prisma.emailMessage.findFirst({
@@ -773,9 +773,8 @@ const emailSubject = `Re: ${subject}`;
             console.error(`Failed to get AI agent or update ticket for ticket ${ticketId}:`, dbError);
           }
         }
-
-        return;
       }
+
       if (!result.emailId) {
         console.error(`Failed to send auto-response for ticket ${ticketId}: ${result.error ?? 'unknown error'}`);
         if (outboundRowId) {
@@ -820,11 +819,11 @@ const emailSubject = `Re: ${subject}`;
     // Escape HTML special characters in the title to prevent HTML injection
     // (uses unicode escapes to avoid ambiguity with HTML entities)
     const escapedTitle = (ticket.title || '')
-      .replace(/\u0026/g, '\u0026amp;')
-      .replace(/</g, '\u0026lt;')
-      .replace(/>/g, '\u0026gt;')
-      .replace(/"/g, '\u0026quot;')
-      .replace(/'/g, '\u0026#39;');
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
 
     // Do not send if senderEmail is missing or empty
     if (!senderEmail) {
@@ -850,9 +849,7 @@ const emailSubject = `Re: ${subject}`;
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
         <h2 style="color: #1a56db; margin-bottom: 8px;">Help Desk</h2>
         <p style="color: #333; font-size: 16px;">Dear customer,</p>
-        <p style="color: #333; font-size: 15px; line-height: 1.6;">
-          Thank you for contacting our Help Desk. Your request has been received and a ticket has been created.
-        </p>
+        <p style="color: #333; font-size: 16px;">Thank you for contacting our Help Desk. Your request has been received and a ticket has been created.</p>
         <table style="border-collapse: collapse; margin: 16px 0; font-size: 14px;">
           <tr>
             <td style="padding: 6px 12px; font-weight: bold; color: #333;">Ticket Number:</td>
@@ -990,7 +987,7 @@ const emailSubject = `Re: ${subject}`;
       parsedEmail.gmailThreadId = this.extractGmailThreadId(email);
 
       // Duplicate prevention: attempt to create a placeholder EmailMessage record.
-// The UNIQUE constraint on messageId ensures atomic ownership.
+      // The UNIQUE constraint on messageId ensures atomic ownership.
       if (parsedEmail.messageId) {
         const normalizedMessageId = this.normalizeMessageId(parsedEmail.messageId);
         let placeholderCreated = false;
@@ -1130,10 +1127,10 @@ const emailSubject = `Re: ${subject}`;
 
           // Combine ticket info with conversation history for AI analysis
           const analysisDescription = `
-TITLE: ${updatedTicket.title}
+          TITLE: ${updatedTicket.title}
 
-CONVERSATION HISTORY:
-${conversationHistory}`;
+          CONVERSATION HISTORY:
+          ${conversationHistory}`;
 
           const { analyzeTicketWithAI } = await import('../controllers/ai.controller');
           const aiDecision = await analyzeTicketWithAI(
@@ -1168,14 +1165,7 @@ ${conversationHistory}`;
               },
             });
 
-            // Send email response to customer using existing template
-            await this.sendAutoResponse(
-              senderEmail,
-              `Re: ${parsedEmail.subject}`,
-              updatedTicket.id
-            );
-
-            console.log(`Ticket ${updatedTicket.id} resolved by AI analysis after customer follow-up`);
+            console.log(`Ticket ${updatedTicket.id} resolved by AI`);
           } else {
             // AI cannot confidently resolve - reopen ticket for human agents
             // (unless it's already OPEN or IN_PROGRESS)
@@ -1273,8 +1263,9 @@ ${conversationHistory}`;
       // mailparser's simpleParser() expects (a Buffer/string/stream). Fetching
       // 'HEADER'/'TEXT' returns structured objects that cause
       // "TypeError: input.once is not a function" inside mailparser.
+      // uid: true fetches the UID needed to mark emails as seen
       const searchCriteria = ['UNSEEN'];
-      const fetchOptions = { bodies: [''] };
+      const fetchOptions = { bodies: [''], uid: true };
 
       const messages = await connection.search(searchCriteria, fetchOptions);
 
