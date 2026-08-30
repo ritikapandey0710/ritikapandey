@@ -26,6 +26,8 @@ import {
 } from '@tanstack/react-table';
 
 const STATUS_LABELS: Record<TicketStatus, { label: string; color: string }> = {
+  [TicketStatus.NEW]: { label: 'New', color: 'bg-slate-100 text-slate-700' },
+  [TicketStatus.PROCESSING]: { label: 'Processing', color: 'bg-yellow-100 text-yellow-700' },
   [TicketStatus.OPEN]: { label: 'Open', color: 'bg-blue-100 text-blue-700' },
   [TicketStatus.IN_PROGRESS]: { label: 'In Progress', color: 'bg-amber-100 text-amber-700' },
   [TicketStatus.RESOLVED]: { label: 'Resolved', color: 'bg-emerald-100 text-emerald-700' },
@@ -51,7 +53,7 @@ const createTicketSchema = z.object({
   senderName: z.string().trim().min(1, 'Sender name is required'),
   senderEmail: z.string().email('Invalid email address'),
   category: z.preprocess((v) => (v === '' ? undefined : v), z.union([z.literal('GENERAL_QUESTION'), z.literal('TECHNICAL_QUESTION'), z.literal('REFUND_REQUEST')]).optional()),
-  status: z.union([z.literal('OPEN'), z.literal('IN_PROGRESS'), z.literal('RESOLVED'), z.literal('CLOSED')]).default('OPEN' as TicketStatus),
+  status: z.union([z.literal('OPEN'), z.literal('IN_PROGRESS'), z.literal('RESOLVED'), z.literal('CLOSED')]).default('OPEN'),
 });
 
 function CreateTicketModal({ isOpen, onClose, onSuccess }: {
@@ -61,7 +63,7 @@ function CreateTicketModal({ isOpen, onClose, onSuccess }: {
 }) {
   const { register, handleSubmit, formState: { errors, isSubmitting }, reset } = useForm({
     resolver: zodResolver(createTicketSchema),
-    defaultValues: { title: '', body: '', senderName: '', senderEmail: '', category: undefined, status: 'OPEN' as TicketStatus },
+    defaultValues: { title: '', body: '', senderName: '', senderEmail: '', category: undefined, status: 'OPEN' },
   });
   const [apiError, setApiError] = useState('');
 

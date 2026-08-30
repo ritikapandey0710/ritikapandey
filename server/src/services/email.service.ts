@@ -127,7 +127,7 @@ export class EmailService {
           user: options.imap.user.trim(),
           password: options.imap.password.trim(),
           host: options.imap.host.trim(),
-          port: parseInt(options.imap.port || '993', 10),
+          port: parseInt(String(options.imap.port ?? 993), 10),
           tls: options.imap.tls,
           authTimeout: options.imap.authTimeout || 5000,
           // Note: rejectUnauthorized is intentionally omitted to rely on imap-simple defaults

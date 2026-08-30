@@ -2,6 +2,8 @@ import { TicketStatus, TicketCategory, TicketPriority } from '@/types/ticket';
 
 export const getStatusLabel = (status: TicketStatus): string => {
   switch (status) {
+    case TicketStatus.NEW: return 'New';
+    case TicketStatus.PROCESSING: return 'Processing';
     case TicketStatus.OPEN: return 'Open';
     case TicketStatus.IN_PROGRESS: return 'In Progress';
     case TicketStatus.RESOLVED: return 'Resolved';
@@ -20,6 +22,8 @@ export const getCategoryLabel = (category: TicketCategory): string => {
 };
 
 export const STATUS_LABELS: Record<TicketStatus, { label: string; color: string }> = {
+  [TicketStatus.NEW]: { label: 'New', color: 'bg-slate-100 text-slate-700' },
+  [TicketStatus.PROCESSING]: { label: 'Processing', color: 'bg-yellow-100 text-yellow-700' },
   [TicketStatus.OPEN]: { label: 'Open', color: 'bg-blue-100 text-blue-700' },
   [TicketStatus.IN_PROGRESS]: { label: 'In Progress', color: 'bg-amber-100 text-amber-700' },
   [TicketStatus.RESOLVED]: { label: 'Resolved', color: 'bg-emerald-100 text-emerald-700' },

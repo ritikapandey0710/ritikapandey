@@ -35,9 +35,9 @@ export async function getTickets(req: any, res: any) {
     whereConditions.push({ assigneeId: { contains: assigneeId, mode: "insensitive" } });
   }
 
-  // By default, exclude tickets that are NEW or PROCESSING (being worked on by AI or brand new)
-  // This corresponds to the old "excludeAiResolved" behavior but using the new state system
-  if (excludeAiResolved !== "false") { // Default to true unless explicitly set to false
+  // By default, include all tickets (including NEW and PROCESSING)
+  // Exclude NEW and PROCESSING only when excludeAiResolved is explicitly set to true
+  if (excludeAiResolved === "true") {
     whereConditions.push({
       NOT: {
         status: {

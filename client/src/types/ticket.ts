@@ -1,11 +1,13 @@
 export enum TicketStatus {
+  NEW = 'NEW',
+  PROCESSING = 'PROCESSING',
   OPEN = 'OPEN',
   IN_PROGRESS = 'IN_PROGRESS',
   RESOLVED = 'RESOLVED',
   CLOSED = 'CLOSED',
 }
 
-export const TICKET_STATUSES: TicketStatus[] = [TicketStatus.OPEN, TicketStatus.IN_PROGRESS, TicketStatus.RESOLVED, TicketStatus.CLOSED];
+export const TICKET_STATUSES: TicketStatus[] = [TicketStatus.NEW, TicketStatus.PROCESSING, TicketStatus.OPEN, TicketStatus.IN_PROGRESS, TicketStatus.RESOLVED, TicketStatus.CLOSED];
 
 export enum TicketCategory {
   GENERAL_QUESTION = 'GENERAL_QUESTION',
