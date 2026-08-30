@@ -176,46 +176,112 @@ export async function processNewTicket(input: ProcessNewTicketInput) {
       });
     }
 
-  // Fire off AI classification in the background (do not await)
-  const { classifyTicket } = await import('../controllers/ai.controller');
-  classifyTicket(title, description || "")
-    .then(({ category, priority }) => {
-      // Update the ticket with the classified category and priority
-      // Need to cast to proper types for Prisma
-      return prisma.ticket.update({
-        where: { id: ticket.id },
-        data: {
-          category: category as any,
-          priority: priority as any
-        },
+  // Run AI analysis to generate a solution and determine if issue is resolved
+// Skip this for email flow when skipAutoResolve=true, as AI resolution
+// is handled in sendAutoResponse to avoid doing AI analysis twice
+if (!skipAutoResolve) {
+  try {
+    const { analyzeTicketWithAI } = await import('../controllers/ai.controller');
+    const aiDecision = await analyzeTicketWithAI(title, description || "");
+
+    // Save AI response as a reply
+    let replyAuthorId = ticket.reporterId;
+    if (!replyAuthorId) {
+      const botUser = await prisma.user.findUnique({
+        where: { email: 'system@helpdesk.local' }
       });
-    })
-    .then(() => {
-      console.log(`AI classification completed for ticket ${ticket.id}`);
-    })
-    .catch((error) => {
-      // Log the original AI text-generation error for debugging
-      console.error(`AI classification failed for ticket ${ticket.id}`, error);
-      // If the AI text generation threw, do not leave the ticket stuck in its
-      // processing/AI state. Reset ONLY the status to OPEN and unassign from AI
-      // (all other fields are left untouched) so it is visible to human agents.
-      // Guard against overriding a ticket that was already RESOLVED by the
-      // AI-powered email auto-response flow (sendAutoResponse).
-      prisma.ticket.update({
-        where: { id: ticket.id, status: { not: "RESOLVED" } },
+      if (botUser) {
+        replyAuthorId = botUser.id;
+      }
+    }
+    if (replyAuthorId) {
+      await prisma.reply.create({
         data: {
-          status: "OPEN",
-          assigneeId: null, // Unassign from AI agent
-        },
-      }).catch((statusUpdateError: any) => {
-        // P2025 = record not found (the ticket was already RESOLVED, so our
-        // guard clause correctly prevented the update). Silence this; any
-        // other error is unexpected and worth logging.
-        if (statusUpdateError?.code !== "P2025") {
-          console.error(`Failed to reset ticket ${ticket.id} status to OPEN after AI classification failure:`, statusUpdateError);
+          body: [aiDecision.solution, aiDecision.verification]
+            .filter((s) => s && s.trim().length > 0)
+            .join('\n\n'),
+          ticketId: ticket.id,
+          authorId: replyAuthorId,
+          senderType: "AGENT"
         }
       });
-    });
+    }
+
+    // Update ticket based on AI decision
+    if (aiDecision.canResolve && aiDecision.confidence >= 0.7) {
+      // AI confidently solved the issue
+      await prisma.ticket.update({
+        where: { id: ticket.id },
+        data: {
+          status: "RESOLVED",
+          category: aiDecision.category as any,
+          priority: (aiDecision.confidence >= 0.9 ? "LOW" : "MEDIUM") as any, // High confidence = low priority (resolved)
+          resolvedByAI: true,
+          resolvedAt: new Date(),
+          assigneeId: aiAgentId || null, // Keep assigned to AI if we have it, otherwise unassign
+        },
+      });
+      console.log(`Ticket ${ticket.id} resolved by AI with confidence ${aiDecision.confidence}`);
+    } else {
+      // AI couldn't confidently resolve or low confidence - leave open for humans
+      await prisma.ticket.update({
+        where: { id: ticket.id },
+        data: {
+          status: "OPEN",
+          category: aiDecision.category as any,
+          priority: (aiDecision.confidence >= 0.8 ? "LOW" : "MEDIUM") as any,
+          assigneeId: null, // Unassign from AI so human agents can pick it up
+        },
+      });
+      console.log(`Ticket ${ticket.id} analyzed by AI (confidence: ${aiDecision.confidence}) but left open for human handling`);
+    }
+  } catch (aiError) {
+    // AI analysis failed completely - fall back to original behavior
+    console.error(`AI analysis failed for ticket ${ticket.id}`, aiError);
+
+    // Fire off AI classification in the background (do not await) - original fallback
+    const { classifyTicket } = await import('../controllers/ai.controller');
+    classifyTicket(title, description || "")
+      .then(({ category, priority }) => {
+        // Update the ticket with the classified category and priority
+        // Need to cast to proper types for Prisma
+        return prisma.ticket.update({
+          where: { id: ticket.id },
+          data: {
+            category: category as any,
+            priority: priority as any
+          },
+        });
+      })
+      .then(() => {
+        console.log(`AI classification completed for ticket ${ticket.id}`);
+      })
+      .catch((error) => {
+        // Log the original AI text-generation error for debugging
+        console.error(`AI classification failed for ticket ${ticket.id}`, error);
+        // If the AI text generation threw, do not leave the ticket stuck in its
+        // processing/AI state. Reset ONLY the status to OPEN and unassign from AI
+        // (all other fields are left untouched) so it is visible to human agents.
+        // Guard against overriding a ticket that was already RESOLVED by the
+        // AI-powered email auto-response flow (sendAutoResponse).
+        prisma.ticket.update({
+          where: { id: ticket.id, status: { not: "RESOLVED" } },
+          data: {
+            status: "OPEN",
+            assigneeId: null, // Unassign from AI agent
+          },
+        }).catch((statusUpdateError: any) => {
+          // P2025 = record not found (the ticket was already RESOLVED, so our
+          // guard clause correctly prevented the update). Silence this; any
+          // other error is unexpected and worth logging.
+          if (statusUpdateError?.code !== "P2025") {
+            console.error(`Failed to reset ticket ${ticket.id} status to OPEN after AI classification failure:`, statusUpdateError);
+          }
+        });
+      });
+  }
 
   return ticket;
 }
+}
+// Test comment to verify edits work on ticketProcessing.service.ts

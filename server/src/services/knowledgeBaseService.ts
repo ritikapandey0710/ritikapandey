@@ -231,3 +231,4 @@ class KnowledgeBaseService {
 }
 
 export const knowledgeBaseService = new KnowledgeBaseService();
+// Test comment to verify edits work

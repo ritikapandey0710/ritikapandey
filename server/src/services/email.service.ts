@@ -5,7 +5,7 @@ import nodemailer from 'nodemailer';
 import { Resend } from 'resend';
 import { sendEmailWithRetry } from './resend.service';
 import { knowledgeBaseService, type KnowledgeBaseEntry } from './knowledgeBaseService';
-import { resolveTicketWithAI, type AIResolutionDecision } from '../controllers/ai.controller';
+import { resolveTicketWithAI, type AIResolutionDecision, type TicketAnalysisDecision } from '../controllers/ai.controller';
 import { getOrCreateAIAgent } from './aiAgentService';
 import { captureServerError } from '../lib/sentry';
 
@@ -65,6 +65,30 @@ function textToHtml(text: string): string {
  * so nothing here is invented at send time either.
  */
 export function buildSolutionEmail(decision: AIResolutionDecision): string {
+  const parts: string[] = [];
+  parts.push('<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">');
+  parts.push('<p style="color:#333;font-size:16px;">Hello,</p>');
+  parts.push(
+    '<p style="color:#333;font-size:15px;">Thank you for contacting Help Desk Support. Please try the following:</p>'
+  );
+  parts.push(textToHtml(decision.solution));
+  if (decision.verification && decision.verification.trim().length > 0) {
+    parts.push('<p style="color:#333;font-size:15px;"><strong>To confirm the issue is resolved:</strong></p>');
+    parts.push(textToHtml(decision.verification));
+  }
+  parts.push(
+    '<p style="color:#333;font-size:15px;">If you are still unable to resolve the issue after following these steps, please reply to this email and we will investigate further.</p>'
+  );
+  parts.push('<p style="color:#333;font-size:15px;">Best regards,<br/>Help Desk Support</p>');
+  parts.push('</div>');
+  return parts.join('\n');
+}
+
+/**
+ * Build a solution email from a TicketAnalysisDecision (general AI analysis).
+ * Similar to buildSolutionEmail but works with the analysis decision format.
+ */
+export function buildSolutionEmailFromAnalysis(decision: TicketAnalysisDecision): string {
   const parts: string[] = [];
   parts.push('<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">');
   parts.push('<p style="color:#333;font-size:16px;">Hello,</p>');
@@ -572,8 +596,10 @@ export class EmailService {
       let canResolve = false;
       let kbEntry: KnowledgeBaseEntry | null = null;
       let decision: AIResolutionDecision | null = null;
+      let aiDecision: TicketAnalysisDecision | null = null;
 
       try {
+        // First try knowledge base matching
         kbEntry = knowledgeBaseService.findMatchingEntry(title, description);
         if (kbEntry) {
           decision = await resolveTicketWithAI(title, description, kbEntry);
@@ -584,6 +610,20 @@ export class EmailService {
           ) {
             canResolve = true;
             html = buildSolutionEmail(decision);
+          }
+        }
+
+        // If no KB match or low confidence, fall back to general AI analysis
+        if (!canResolve) {
+          const { analyzeTicketWithAI } = await import('../controllers/ai.controller');
+          aiDecision = await analyzeTicketWithAI(title, description);
+
+          if (
+            aiDecision.canResolve &&
+            aiDecision.confidence >= 0.7 // Same threshold as in ticket processing
+          ) {
+            canResolve = true;
+            html = buildSolutionEmailFromAnalysis(aiDecision);
           }
         }
       } catch (aiError) {
@@ -599,12 +639,60 @@ export class EmailService {
       }
 
       if (!html) {
-        // No reliable knowledge-base solution — send the professional
+        // No reliable knowledge-base or AI solution — send the professional
         // fallback. The ticket intentionally stays OPEN.
         html = buildFallbackEmail();
       }
 
-      const emailSubject = `Re: ${subject}`;
+      // If we have a confident AI resolution, save the AI reply and mark ticket as RESOLVED
+// This happens BEFORE sending email so ticket resolution is independent of email delivery
+if (canResolve) {
+  try {
+    const aiAgent = await getOrCreateAIAgent();
+    await prisma.reply.create({
+      data: {
+        body: [
+          (decision && decision.solution) ? decision.solution : '',
+          (decision && decision.verification) ? decision.verification : '',
+          (aiDecision && aiDecision.solution) ? aiDecision.solution : '',
+          (aiDecision && aiDecision.verification) ? aiDecision.verification : ''
+        ]
+          .filter((s) => s && s.trim().length > 0)
+          .join('\n\n'),
+        ticketId,
+        authorId: aiAgent.id,
+        senderType: 'AGENT',
+      },
+    });
+    await prisma.ticket.update({
+      where: { id: ticketId },
+      data: {
+        status: 'RESOLVED',
+        resolvedByAI: true,
+        resolvedAt: new Date(),
+        assigneeId: aiAgent.id, // Assign to the existing AI agent
+        // Update category and priority based on which decision we used
+        ...(decision ? {
+          category: decision.category as any,
+          priority: (decision.confidence >= 0.9 ? 'LOW' : 'MEDIUM') as any
+        } : {
+          category: aiDecision?.category as any,
+          priority: (aiDecision!.confidence >= 0.9 ? 'LOW' : 'MEDIUM') as any
+        })
+      },
+    });
+    if (decision && kbEntry) {
+      console.log(`Ticket ${ticketId} auto-resolved using knowledge base: ${kbEntry.title}`);
+    } else if (aiDecision) {
+      console.log(`Ticket ${ticketId} auto-resolved using general AI analysis with confidence ${aiDecision.confidence}`);
+    }
+  } catch (dbError) {
+    // Never crash email ingestion on reply/status persistence issues.
+    console.error(`Failed to record AI resolution for ticket ${ticketId}:`, dbError);
+  }
+}
+
+const emailSubject = `Re: ${subject}`;
 
       // Threading headers: reply to the latest inbound email on this ticket.
       const lastEmail = await prisma.emailMessage.findFirst({
@@ -667,37 +755,6 @@ export class EmailService {
         });
         console.log(`Auto-response sent via Resend for ticket ${ticketId} (email id: ${result.emailId})`);
 
-        // The email was delivered: only NOW store the customer-facing reply
-        // and mark the ticket RESOLVED. This only happens when the knowledge
-        // base contained a verified solution (canResolve === true).
-        if (canResolve && decision && kbEntry) {
-          try {
-            const aiAgent = await getOrCreateAIAgent();
-            await prisma.reply.create({
-              data: {
-                body: [decision.solution, decision.verification]
-                  .filter((s) => s && s.trim().length > 0)
-                  .join('\n\n'),
-                ticketId,
-                authorId: aiAgent.id,
-                senderType: 'AGENT',
-              },
-            });
-            await prisma.ticket.update({
-              where: { id: ticketId },
-              data: {
-                status: 'RESOLVED',
-                resolvedByAI: true,
-                resolvedAt: new Date(),
-                assigneeId: aiAgent.id, // Assign to the existing AI agent
-              },
-            });
-            console.log(`Ticket ${ticketId} auto-resolved using knowledge base: ${kbEntry.title}`);
-          } catch (dbError) {
-            // Never crash email ingestion on reply/status persistence issues.
-            console.error(`Failed to record AI resolution for ticket ${ticketId}:`, dbError);
-          }
-        }
         return;
       }
       if (!result.emailId) {
@@ -813,7 +870,7 @@ export class EmailService {
         const queued = await prisma.emailMessage.create({
           data: {
             messageId: pendingMessageId,
-            ticketId: ticket.id,
+            ticketId: ticket!.id,
             direction: 'OUTBOUND',
             deliveryStatus: 'QUEUED',
             toAddress: senderEmail,
@@ -955,8 +1012,8 @@ export class EmailService {
       }
 
       if (threadMatch) {
-        // Customer reply to an existing ticket - do NOT create a new ticket
-        // and do NOT run new-ticket AI/KB processing.
+        // Customer reply to an existing ticket - save the reply and then
+        // run AI analysis to see if we can resolve the issue
         const reply = await prisma.reply.create({
           data: {
             body: this.extractEmailBody(parsedEmail),
@@ -980,11 +1037,115 @@ export class EmailService {
             replyId: reply.id,
           });
         }
+
+        // Run AI analysis on the updated ticket to see if we can resolve the issue
+        // Get the ticket with latest replies to pass to AI analysis
+        const updatedTicket = await prisma.ticket.findUnique({
+          where: { id: threadMatch.ticketId },
+          include: {
+            replies: {
+              orderBy: { createdAt: 'desc' },
+              take: 50 // Get recent replies for context
+            }
+          }
+        });
+
+        if (!updatedTicket) {
+          console.error(`Could not find ticket ${threadMatch.ticketId} for customer reply from ${senderEmail}`);
+          return;
+        }
+
+        try {
+          // Build conversation history from replies
+          const conversationHistory = updatedTicket.replies
+            .map(reply => {
+              const prefix = reply.senderType === 'CUSTOMER' ? 'CUSTOMER' : 'AGENT';
+              return `${prefix}: ${reply.body}`;
+            })
+            .join('\n\n');
+
+          // Combine ticket info with conversation history for AI analysis
+          const analysisDescription = `
+TITLE: ${updatedTicket.title}
+
+CONVERSATION HISTORY:
+${conversationHistory}`;
+
+          const { analyzeTicketWithAI } = await import('../controllers/ai.controller');
+          const aiDecision = await analyzeTicketWithAI(
+            updatedTicket.title,
+            analysisDescription
+          );
+
+          if (aiDecision.canResolve && aiDecision.confidence >= 0.7) {
+            // AI can resolve the issue - save response and send email
+            const aiAgent = await getOrCreateAIAgent();
+            await prisma.reply.create({
+              data: {
+                body: [aiDecision.solution, aiDecision.verification]
+                  .filter((s) => s && s.trim().length > 0)
+                  .join('\n\n'),
+                ticketId: updatedTicket.id,
+                authorId: aiAgent.id,
+                senderType: 'AGENT',
+              },
+            });
+
+            // Update ticket status
+            await prisma.ticket.update({
+              where: { id: updatedTicket.id },
+              data: {
+                status: 'RESOLVED',
+                resolvedByAI: true,
+                resolvedAt: new Date(),
+                assigneeId: aiAgent.id,
+                // Update category based on AI's suggestion
+                category: aiDecision.category as any,
+              },
+            });
+
+            // Send email response to customer using existing template
+            await this.sendAutoResponse(
+              senderEmail,
+              `Re: ${parsedEmail.subject}`,
+              updatedTicket.id
+            );
+
+            console.log(`Ticket ${updatedTicket.id} resolved by AI analysis after customer follow-up`);
+          } else {
+            // AI cannot confidently resolve - reopen ticket for human agents
+            // (unless it's already OPEN or IN_PROGRESS)
+            if (updatedTicket.status !== 'OPEN' && updatedTicket.status !== 'IN_PROGRESS') {
+              await prisma.ticket.update({
+                where: { id: updatedTicket.id },
+                data: {
+                  status: 'OPEN',
+                  assigneeId: null // Unassign so human agents can pick it up
+                }
+              });
+              console.log(`Ticket ${updatedTicket.id} reopened for human agent review after customer follow-up`);
+            }
+          }
+        } catch (aiAnalysisError) {
+          console.error(`AI analysis failed for ticket ${threadMatch.ticketId} after customer reply:`, aiAnalysisError);
+          // Even if AI analysis fails, if ticket was RESOLVED, reopen it for human review
+          if (updatedTicket.status === 'RESOLVED') {
+            await prisma.ticket.update({
+              where: { id: updatedTicket.id },
+              data: {
+                status: 'OPEN',
+                assigneeId: null // Unassign so human agents can pick it up
+              }
+            });
+            console.log(`Ticket ${updatedTicket.id} reopened due to AI analysis failure after customer follow-up`);
+          }
+          // Continue without AI resolution - leave ticket for human agents
+        }
       } else {
         // New conversation - use the Phase 1 pipeline unchanged
         const ticket = await this.createTicketFromEmail(parsedEmail, userId);
 
-        console.log(`Created ticket ${ticket.id} from email by ${senderEmail}`);
+        console.log(`Created ticket ${ticket!.id} from email by ${senderEmail}`);
 
         if (parsedEmail.messageId) {
           await this.recordEmailMessage({
@@ -992,12 +1153,12 @@ export class EmailService {
             inReplyTo: parsedEmail.inReplyTo,
             references: parsedEmail.references,
             gmailThreadId: parsedEmail.gmailThreadId,
-            ticketId: ticket.id,
+            ticketId: ticket!.id,
           });
         }
 
         // Send auto-response only for newly created tickets
-        await this.sendAutoResponse(senderEmail, parsedEmail.subject, ticket.id);
+        await this.sendAutoResponse(senderEmail, parsedEmail.subject, ticket!.id);
       }
 
       // Mark email as seen
