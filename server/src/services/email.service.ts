@@ -144,6 +144,7 @@ export class EmailService {
   private smtpTransport: nodemailer.Transporter | null;
   private fromEmail: string;
   private resend: Resend | null;
+  private isPolling: boolean;
 
   constructor(options: EmailOptions) {
     this.imapConfig = options.imap
@@ -170,6 +171,7 @@ export class EmailService {
     this.resend = process.env.RESEND_API_KEY
       ? new Resend(process.env.RESEND_API_KEY)
       : null;
+    this.isPolling = false;
 
     if (options.smtp) {
       this.smtpTransport = nodemailer.createTransport({
@@ -220,7 +222,7 @@ export class EmailService {
     }
   }
 
-  /**
+    /**
    * Connect to IMAP server
    */
   private async connectIMAP(): Promise<any> {
@@ -406,36 +408,42 @@ export class EmailService {
    */
   private async findThreadMatch(
     email: ParsedEmail
-  ): Promise<{ ticketId: string } | null> {
+  ): Promise<string | null> {
     // 1. In-Reply-To
     if (email.inReplyTo) {
       const inReplyToId = this.normalizeMessageId(email.inReplyTo);
       const match = await prisma.emailMessage.findFirst({
-        where: { messageId: inReplyToId },
+        where: { messageId: inReplyToId, ticketId: { not: null } },
         select: { ticketId: true },
       });
-      if (match) return match;
+      if (match?.ticketId) {
+        return match.ticketId;
+      }
     }
 
     // 2. References (any referenced Message-ID we have seen before)
     const referenceIds = this.parseReferences(email.references);
     if (referenceIds.length > 0) {
       const match = await prisma.emailMessage.findFirst({
-        where: { messageId: { in: referenceIds } },
+        where: { messageId: { in: referenceIds }, ticketId: { not: null } },
         orderBy: { createdAt: 'desc' },
         select: { ticketId: true },
       });
-      if (match) return match;
+      if (match?.ticketId) {
+        return match.ticketId;
+      }
     }
 
     // 3. Gmail thread ID
     if (email.gmailThreadId) {
       const match = await prisma.emailMessage.findFirst({
-        where: { gmailThreadId: email.gmailThreadId },
+        where: { gmailThreadId: email.gmailThreadId, ticketId: { not: null } },
         orderBy: { createdAt: 'desc' },
         select: { ticketId: true },
       });
-      if (match) return match;
+      if (match?.ticketId) {
+        return match.ticketId;
+      }
     }
 
     return null;
@@ -600,7 +608,9 @@ export class EmailService {
 
       try {
         // First try knowledge base matching
+        console.log(`[sendAutoResponse] Checking knowledge base for title: "${title}", description: "${description}"`);
         kbEntry = knowledgeBaseService.findMatchingEntry(title, description);
+        console.log(`[sendAutoResponse] Knowledge base result:`, kbEntry ? `found: ${kbEntry.title}` : 'null');
         if (kbEntry) {
           decision = await resolveTicketWithAI(title, description, kbEntry);
           if (
@@ -615,8 +625,10 @@ export class EmailService {
 
         // If no KB match or low confidence, fall back to general AI analysis
         if (!canResolve) {
+          console.log(`[sendAutoResponse] About to call analyzeTicketWithAI (dynamic import)`);
           const { analyzeTicketWithAI } = await import('../controllers/ai.controller');
           aiDecision = await analyzeTicketWithAI(title, description);
+          console.log(`[sendAutoResponse] analyzeTicketWithAI returned:`, aiDecision);
 
           if (
             aiDecision.canResolve &&
@@ -644,53 +656,24 @@ export class EmailService {
         html = buildFallbackEmail();
       }
 
+      // If AI cannot resolve, mark ticket as OPEN and unassign AI agent
+      if (!canResolve) {
+        try {
+          await prisma.ticket.update({
+            where: { id: ticketId },
+            data: {
+              status: 'OPEN',
+              assigneeId: null,
+            },
+          });
+        } catch (err) {
+          console.error(`Failed to mark ticket as OPEN after AI resolution failure:`, err);
+        }
+      }
+
       // If we have a confident AI resolution, save the AI reply and mark ticket as RESOLVED
-// This happens BEFORE sending email so ticket resolution is independent of email delivery
-if (canResolve) {
-  try {
-    const aiAgent = await getOrCreateAIAgent();
-    await prisma.reply.create({
-      data: {
-        body: [
-          (decision && decision.solution) ? decision.solution : '',
-          (decision && decision.verification) ? decision.verification : '',
-          (aiDecision && aiDecision.solution) ? aiDecision.solution : '',
-          (aiDecision && aiDecision.verification) ? aiDecision.verification : ''
-        ]
-          .filter((s) => s && s.trim().length > 0)
-          .join('\n\n'),
-        ticketId,
-        authorId: aiAgent.id,
-        senderType: 'AGENT',
-      },
-    });
-    await prisma.ticket.update({
-      where: { id: ticketId },
-      data: {
-        status: 'RESOLVED',
-        resolvedByAI: true,
-        resolvedAt: new Date(),
-        assigneeId: aiAgent.id, // Assign to the existing AI agent
-        // Update category and priority based on which decision we used
-        ...(decision ? {
-          category: decision.category as any,
-          priority: (decision.confidence >= 0.9 ? 'LOW' : 'MEDIUM') as any
-        } : {
-          category: aiDecision?.category as any,
-          priority: (aiDecision!.confidence >= 0.9 ? 'LOW' : 'MEDIUM') as any
-        })
-      },
-    });
-    if (decision && kbEntry) {
-      console.log(`Ticket ${ticketId} auto-resolved using knowledge base: ${kbEntry.title}`);
-    } else if (aiDecision) {
-      console.log(`Ticket ${ticketId} auto-resolved using general AI analysis with confidence ${aiDecision.confidence}`);
-    }
-  } catch (dbError) {
-    // Never crash email ingestion on reply/status persistence issues.
-    console.error(`Failed to record AI resolution for ticket ${ticketId}:`, dbError);
-  }
-}
+      // This happens AFTER sending email so ticket resolution depends on successful delivery
+      // Note: The actual reply creation and ticket update happens after email sending
 
 const emailSubject = `Re: ${subject}`;
 
@@ -754,6 +737,42 @@ const emailSubject = `Re: ${subject}`;
           console.error(`Failed to mark auto-response EmailMessage SENT for ticket ${ticketId}:`, err);
         });
         console.log(`Auto-response sent via Resend for ticket ${ticketId} (email id: ${result.emailId})`);
+
+        // If we have a confident AI resolution, save the AI reply and mark ticket as RESOLVED
+        // This happens AFTER sending email so ticket resolution depends on successful delivery
+        if (canResolve) {
+          try {
+            const aiAgent = await getOrCreateAIAgent();
+            await prisma.reply.create({
+              data: {
+                body: [decision?.solution, decision?.verification]
+                  .filter((s) => s && s.trim().length > 0)
+                  .join('\n\n'),
+                ticketId: ticketId,
+                authorId: aiAgent.id,
+                senderType: 'AGENT',
+              },
+            });
+
+            // Update ticket status
+            await prisma.ticket.update({
+              where: { id: ticketId },
+              data: {
+                status: 'RESOLVED',
+                resolvedByAI: true,
+                resolvedAt: new Date(),
+                assigneeId: aiAgent.id,
+                // Update category based on AI's suggestion
+                category: (decision?.category || aiDecision?.category) as any,
+              },
+            });
+
+            console.log(`Ticket ${ticketId} resolved by AI`);
+          } catch (dbError) {
+            // Never crash email ingestion on reply/status persistence issues.
+            console.error(`Failed to get AI agent or update ticket for ticket ${ticketId}:`, dbError);
+          }
+        }
 
         return;
       }
@@ -944,6 +963,8 @@ const emailSubject = `Re: ${subject}`;
     email: any,
     rawEmail?: Buffer | string
   ): Promise<void> {
+    let placeholderId: string | null = null;
+    let placeholderUpdated = false;
     try {
       // Log start of processing (non-sensitive)
       console.log('Processing email...');
@@ -968,23 +989,66 @@ const emailSubject = `Re: ${subject}`;
       // Gmail thread ID is best-effort (may be unavailable)
       parsedEmail.gmailThreadId = this.extractGmailThreadId(email);
 
-      // Duplicate prevention: skip emails whose Message-ID was already processed
+      // Duplicate prevention: attempt to create a placeholder EmailMessage record.
+// The UNIQUE constraint on messageId ensures atomic ownership.
       if (parsedEmail.messageId) {
         const normalizedMessageId = this.normalizeMessageId(parsedEmail.messageId);
-        const existing = await prisma.emailMessage.findUnique({
-          where: { messageId: normalizedMessageId },
-          select: { id: true },
-        });
-        if (existing) {
-          console.log(
-            `Skipping duplicate email (already processed): ${normalizedMessageId}`
-          );
-          if (email.attributes && email.attributes.uid) {
-            await this.markAsSeen(connection, email.attributes.uid);
-            console.log(`Marked duplicate email as seen: UID ${email.attributes.uid}`);
+        let placeholderCreated = false;
+        try {
+          const placeholder = await prisma.emailMessage.create({
+            data: {
+              messageId: normalizedMessageId,
+              direction: 'INBOUND',
+              inReplyTo: parsedEmail.inReplyTo ? this.normalizeMessageId(parsedEmail.inReplyTo) : undefined,
+              references: parsedEmail.references ? this.parseReferences(parsedEmail.references).join(' ') : undefined,
+              gmailThreadId: parsedEmail.gmailThreadId,
+              ticketId: null, // placeholder until ticket is known
+              replyId: null,
+            },
+          });
+          placeholderId = placeholder.id;
+          placeholderCreated = true;
+        } catch (err: any) {
+          if (err?.code === 'P2002') {
+            // Duplicate detected: check if already processed or being processed
+            const existing = await prisma.emailMessage.findUnique({
+              where: { messageId: normalizedMessageId },
+              select: { ticketId: true, replyId: true },
+            });
+
+            if (existing?.ticketId) {
+              // Already fully processed
+              console.log(
+                `Skipping duplicate email (already processed): ${normalizedMessageId}`
+              );
+              if (email.attributes && email.attributes.uid) {
+                await this.markAsSeen(connection, email.attributes.uid);
+                console.log(`Marked duplicate email as seen: UID ${email.attributes.uid}`);
+              }
+              return;
+            } else {
+              // Placeholder exists but ticket not yet created - another process is working on it
+              // Wait briefly to see if the other process completes, then check again
+              // For now, we'll treat this as a duplicate and skip to avoid conflicts
+              console.log(
+                `Skipping duplicate email (processing in progress): ${normalizedMessageId}`
+              );
+              if (email.attributes && email.attributes.uid) {
+                await this.markAsSeen(connection, email.attributes.uid);
+                console.log(`Marked duplicate email as seen: UID ${email.attributes.uid}`);
+              }
+              return;
+            }
+          } else {
+            // Unexpected error: we cannot safely proceed without duplicate protection.
+            // Log the error and return so the email remains UNSEEN for retry.
+            console.error('Failed to create placeholder EmailMessage (unexpected error):', err);
+            return;
           }
-          return;
         }
+
+        // If we couldn't create a placeholder due to unexpected error, we would have returned above.
+        // So if we reach here, placeholderCreated is true.
       }
 
       // Find or create user
@@ -994,7 +1058,7 @@ const emailSubject = `Re: ${subject}`;
       // Thread matching: does this email belong to an existing conversation?
       const threadMatch = await this.findThreadMatch(parsedEmail);
       if (threadMatch) {
-        console.log(`Email matches existing ticket: ${threadMatch.ticketId}`);
+        console.log(`Email matches existing ticket: ${threadMatch}`);
       } else {
         console.log('Email does not match any existing ticket (new conversation)');
       }
@@ -1017,31 +1081,31 @@ const emailSubject = `Re: ${subject}`;
         const reply = await prisma.reply.create({
           data: {
             body: this.extractEmailBody(parsedEmail),
-            ticketId: threadMatch.ticketId,
+            ticketId: threadMatch,
             authorId: userId,
             senderType: 'CUSTOMER',
           },
         });
 
         console.log(
-          `Added customer reply ${reply.id} to ticket ${threadMatch.ticketId} from email by ${senderEmail}`
+          `Added customer reply ${reply.id} to ticket ${threadMatch} from email by ${senderEmail}`
         );
 
-        if (parsedEmail.messageId) {
-          await this.recordEmailMessage({
-            messageId: this.normalizeMessageId(parsedEmail.messageId),
-            inReplyTo: parsedEmail.inReplyTo,
-            references: parsedEmail.references,
-            gmailThreadId: parsedEmail.gmailThreadId,
-            ticketId: threadMatch.ticketId,
-            replyId: reply.id,
+        if (parsedEmail.messageId && placeholderId !== null) {
+          await prisma.emailMessage.update({
+            where: { id: placeholderId },
+            data: {
+              ticketId: threadMatch,
+              replyId: reply.id,
+            },
           });
+          placeholderUpdated = true;
         }
 
         // Run AI analysis on the updated ticket to see if we can resolve the issue
         // Get the ticket with latest replies to pass to AI analysis
         const updatedTicket = await prisma.ticket.findUnique({
-          where: { id: threadMatch.ticketId },
+          where: { id: threadMatch },
           include: {
             replies: {
               orderBy: { createdAt: 'desc' },
@@ -1051,7 +1115,7 @@ const emailSubject = `Re: ${subject}`;
         });
 
         if (!updatedTicket) {
-          console.error(`Could not find ticket ${threadMatch.ticketId} for customer reply from ${senderEmail}`);
+          console.error(`Could not find ticket ${threadMatch} for customer reply from ${senderEmail}`);
           return;
         }
 
@@ -1127,7 +1191,7 @@ ${conversationHistory}`;
             }
           }
         } catch (aiAnalysisError) {
-          console.error(`AI analysis failed for ticket ${threadMatch.ticketId} after customer reply:`, aiAnalysisError);
+          console.error(`AI analysis failed for ticket ${threadMatch} after customer reply:`, aiAnalysisError);
           // Even if AI analysis fails, if ticket was RESOLVED, reopen it for human review
           if (updatedTicket.status === 'RESOLVED') {
             await prisma.ticket.update({
@@ -1147,14 +1211,14 @@ ${conversationHistory}`;
 
         console.log(`Created ticket ${ticket!.id} from email by ${senderEmail}`);
 
-        if (parsedEmail.messageId) {
-          await this.recordEmailMessage({
-            messageId: this.normalizeMessageId(parsedEmail.messageId),
-            inReplyTo: parsedEmail.inReplyTo,
-            references: parsedEmail.references,
-            gmailThreadId: parsedEmail.gmailThreadId,
-            ticketId: ticket!.id,
+        if (parsedEmail.messageId && placeholderId !== null) {
+          await prisma.emailMessage.update({
+            where: { id: placeholderId },
+            data: {
+              ticketId: ticket!.id,
+            },
           });
+          placeholderUpdated = true;
         }
 
         // Send auto-response only for newly created tickets
@@ -1172,6 +1236,14 @@ ${conversationHistory}`;
       }
 
     } catch (error) {
+      // If we created a placeholder but failed to update it with ticketId, clean it up to allow retry
+      if (placeholderId !== null && !placeholderUpdated) {
+        try {
+          await prisma.emailMessage.delete({ where: { id: placeholderId } });
+        } catch (e) {
+          console.error('Failed to cleanup placeholder EmailMessage:', e);
+        }
+      }
       console.error('Error processing email:', error);
       // Don't mark as seen if there was an error, so we can retry
     }
@@ -1251,6 +1323,18 @@ ${conversationHistory}`;
     }
   }
 
+  private async pollOnce(): Promise<number> {
+    if (this.isPolling) {
+      return 0;
+    }
+    this.isPolling = true;
+    try {
+      return await this.checkForNewEmails();
+    } finally {
+      this.isPolling = false;
+    }
+  }
+
   /**
    * Start polling for emails at regular intervals
    */
@@ -1258,7 +1342,7 @@ ${conversationHistory}`;
     console.log(`Starting email polling every ${intervalSeconds} seconds`);
 
     // Run immediately, then at intervals
-    this.checkForNewEmails().then(count => {
+    this.pollOnce().then(count => {
       if (count > 0) {
         console.log(`Processed ${count} email(s) on initial run`);
       }
@@ -1266,7 +1350,7 @@ ${conversationHistory}`;
 
     const interval = setInterval(async () => {
       try {
-        await this.checkForNewEmails();
+        await this.pollOnce();
       } catch (error) {
         console.error('Error in email polling interval:', error);
       }

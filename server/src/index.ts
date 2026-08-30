@@ -196,6 +196,7 @@ const startEmailService = async () => {
     ];
 
     const missingVars = requiredEmailVars.filter(varName => !process.env[varName]);
+    console.log();
 
     if (missingVars.length > 0) {
       console.log(`Email service not started. Missing environment variables: ${missingVars.join(', ')}`);
@@ -243,22 +244,10 @@ const startEmailService = async () => {
     const emailService = new EmailService(emailOptions);
     await emailService.initialize();
 
-    // Start polling for emails
-    const pollInterval = parseInt(process.env.EMAIL_POLL_INTERVAL || '300000', 10); // 5 minutes default
-    console.log(`Starting email polling every ${pollInterval / 1000} seconds`);
-
-    // Initial check
-    await emailService.checkForNewEmails();
-
-    // Set up periodic checking
-    setInterval(async () => {
-      try {
-        await emailService.checkForNewEmails();
-      } catch (error) {
-        console.error('Error during email polling:', error);
-        captureServerError(error, { service: "email", operation: "polling" });
-      }
-    }, pollInterval);
+    // Start polling using the EmailService's built-in polling mechanism (with in-flight guard)
+    const pollIntervalSeconds = parseInt(process.env.EMAIL_POLL_INTERVAL || '300000', 10) / 1000;
+    console.log(`Starting email polling every ${pollIntervalSeconds} seconds`);
+    emailService.startPolling(pollIntervalSeconds);
 
   } catch (error) {
     console.error('Failed to start email service:', error);

@@ -24,6 +24,7 @@ mock.module('../lib/prisma', () => ({ prisma: prismaMock }));
 
 const kbFindMatchMock = mock();
 const kbGetStepsMock = mock();
+const analyzeTAMock = mock();
 mock.module('./knowledgeBaseService', () => ({
   knowledgeBaseService: {
     findMatchingEntry: kbFindMatchMock,
@@ -35,9 +36,11 @@ const sendEmailMock = mock();
 mock.module('./resend.service', () => ({ sendEmailWithRetry: sendEmailMock }));
 
 const resolveAIMock = mock();
+const analyzeAIMock = mock();
 const classifyTicketMock = mock();
 mock.module('../controllers/ai.controller', () => ({
   resolveTicketWithAI: resolveAIMock,
+  analyzeTicketWithAI: analyzeAIMock,
   classifyTicket: classifyTicketMock,
 }));
 
@@ -101,7 +104,7 @@ function resolvedUpdateCalls(): any[] {
 }
 
 beforeEach(() => {
-  for (const m of [kbFindMatchMock, kbGetStepsMock, sendEmailMock, resolveAIMock, classifyTicketMock, getOrCreateAIAgentMock]) {
+  for (const m of [kbFindMatchMock, kbGetStepsMock, sendEmailMock, resolveAIMock, analyzeAIMock, classifyTicketMock, getOrCreateAIAgentMock]) {
     m.mockReset();
   }
   for (const group of Object.values(prismaMock)) {
@@ -416,4 +419,3 @@ describe('recipient filtering (isAddressedToHelpdesk / extractRecipients)', () =
     expect(svc.isAddressedToHelpdesk(makeParsedEmail([]))).toBe(true);
   });
 });
-

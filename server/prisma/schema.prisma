@@ -181,8 +181,8 @@ model EmailMessage {
   /// Time of the most recent send attempt by the delivery worker or inline path.
   lastAttemptAt DateTime?
 
-  ticketId String
-  ticket   Ticket  @relation("TicketEmailMessages", fields: [ticketId], references: [id])
+  ticketId String?
+  ticket   Ticket?  @relation("TicketEmailMessages", fields: [ticketId], references: [id])
   replyId  String?
   reply    Reply?  @relation("ReplyEmailMessages", fields: [replyId], references: [id])
 

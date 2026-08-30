@@ -165,13 +165,13 @@ export async function processNewTicket(input: ProcessNewTicketInput) {
     } else {
       // skipAutoResolve is true — KB resolution is deferred to the email
       // sendAutoResponse flow (AI-verified, email-aware resolution).
-      // Set ticket to OPEN so it is visible to agents and ready for
-      // sendAutoResponse to resolve.
+      // Set ticket to PROCESSING so it goes through the standard flow and
+      // gets assigned to AI agent, then sendAutoResponse will handle resolution.
       await prisma.ticket.update({
         where: { id: ticket.id },
         data: {
-          status: "OPEN",
-          assigneeId: null,
+          status: "PROCESSING",
+          assigneeId: aiAgentId, // Keep assigned to AI agent
         },
       });
     }
@@ -280,8 +280,57 @@ if (!skipAutoResolve) {
         });
       });
   }
+  // When skipAutoResolve is true, we still want to run background classification
+  // to set category/priority, but we skip the AI-powered resolution
+  // Fire off AI classification in the background (do not await)
+  }
+  else {
+    try {
+      const { classifyTicket } = await import('../controllers/ai.controller');
+      classifyTicket(title, description || "")
+        .then(({ category, priority }) => {
+          // Update the ticket with the classified category and priority
+          // Need to cast to proper types for Prisma
+          return prisma.ticket.update({
+            where: { id: ticket.id },
+            data: {
+              category: category as any,
+              priority: priority as any,
+              // Preserve assigneeId (AI agent) when skipAutoResolve is true
+              ...(skipAutoResolve ? { assigneeId: aiAgentId } : {}),
+            },
+          });
+        })
+        .then(() => {
+          console.log(`AI classification completed for ticket ${ticket.id}`);
+        })
+        .catch((error) => {
+          // Log the original AI text-generation error for debugging
+          console.error(`AI classification failed for ticket ${ticket.id}`, error);
+          // If the AI text generation threw, do not leave the ticket stuck in its
+          // processing/AI state. Reset ONLY the status to OPEN and unassign from AI
+          // (all other fields are left untouched) so it is visible to human agents.
+          // Guard against overriding a ticket that was already RESOLVED by the
+          // AI-powered email auto-response flow (sendAutoResponse).
+          prisma.ticket.update({
+            where: { id: ticket.id, status: { not: "RESOLVED" } },
+            data: {
+              status: "OPEN",
+              assigneeId: null, // Unassign from AI agent
+            },
+          }).catch((statusUpdateError: any) => {
+            // P2025 = record not found (the ticket was already RESOLVED, so our
+            // guard clause correctly prevented the update). Silence this; any
+            // other error is unexpected and worth logging.
+            if (statusUpdateError?.code !== "P2025") {
+              console.error(`Failed to reset ticket ${ticket.id} status to OPEN after AI classification failure:`, statusUpdateError);
+            }
+          });
+        });
+    } catch (importError) {
+      console.error(`Failed to import classifyTicket for background classification:`, importError);
+    }
+  }
+return ticket;
+}
 
-  return ticket;
-}
-}
-// Test comment to verify edits work on ticketProcessing.service.ts
