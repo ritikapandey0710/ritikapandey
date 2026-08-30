@@ -44,7 +44,7 @@ jobs:
       
       - name: Run Claude Code
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.CLAUDE_SETUP_TOKEN }}
         run: |
           claude-code \
             --model "${{ inputs.model }}" \
