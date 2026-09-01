@@ -212,7 +212,10 @@ describe('sendAutoResponse — failure handling', () => {
     expect(prismaMock.reply.create).not.toHaveBeenCalled();
   });
 
-  test('email sending failure → ticket NOT marked RESOLVED, row marked FAILED', async () => {
+  test('email sending failure → AI reply + RESOLVED still persisted, row marked FAILED', async () => {
+    // Spec: email delivery failure must NOT roll back the AI solution or the
+    // ticket's resolved state. The QUEUED/FAILED outbound row remains for the
+    // delivery worker to retry.
     kbFindMatchMock.mockReturnValue(KB_ENTRY);
     resolveAIMock.mockResolvedValue(GOOD_DECISION);
     sendEmailMock.mockResolvedValue({ emailId: null, error: 'Resend unavailable', attempts: 3 });
@@ -223,8 +226,80 @@ describe('sendAutoResponse — failure handling', () => {
       where: { id: 'row-1' },
       data: expect.objectContaining({ deliveryStatus: 'FAILED' }),
     });
-    expect(resolvedUpdateCalls().length).toBe(0);
-    expect(prismaMock.reply.create).not.toHaveBeenCalled();
+    // AI solution is still saved to the conversation.
+    expect(prismaMock.reply.create).toHaveBeenCalledTimes(1);
+    const replyData = prismaMock.reply.create.mock.calls[0][0].data;
+    expect(replyData.body).toContain('password reset');
+    // Ticket still becomes RESOLVED with full AI metadata.
+    expect(prismaMock.ticket.update).toHaveBeenCalledWith({
+      where: { id: TICKET_ID },
+      data: expect.objectContaining({
+        status: 'RESOLVED',
+        resolvedByAI: true,
+        resolvedAt: expect.any(Date),
+        assigneeId: 'ai-agent-id',
+      }),
+    });
+  });
+});
+
+describe('sendAutoResponse — general AI analysis path (no KB match)', () => {
+  test('analysis-path resolution stores the ACTUAL solution in Reply and RESOLVES ticket', async () => {
+    // This is the exact production failure: KB has no match, the general
+    // analysis (aiDecision) provides the solution, but the Reply body was
+    // built from `decision` (null) → empty body, and the invalid AI category
+    // ('Technical') crashed the Prisma update → ticket stuck in PROCESSING.
+    kbFindMatchMock.mockReturnValue(null);
+    analyzeAIMock.mockResolvedValue({
+      canResolve: true,
+      confidence: 0.9,
+      category: 'Technical', // invalid enum — must be normalized
+      priority: 'high',
+      solution: '1. Restart your Wi-Fi adapter.\n2. Forget and reconnect the network.',
+      verification: '- Confirm the laptop connects to Wi-Fi',
+    });
+    sendEmailMock.mockResolvedValue({ emailId: 'resend-analysis-1', attempts: 1 });
+
+    await callSendAutoResponse();
+
+    // Reply body must contain the real AI solution (previously "").
+    expect(prismaMock.reply.create).toHaveBeenCalledTimes(1);
+    const replyData = prismaMock.reply.create.mock.calls[0][0].data;
+    expect(replyData.body).toContain('Restart your Wi-Fi adapter');
+    expect(replyData.senderType).toBe('AGENT');
+
+    // Ticket must be RESOLVED with valid normalized category + AI assignee.
+    expect(prismaMock.ticket.update).toHaveBeenCalledWith({
+      where: { id: TICKET_ID },
+      data: expect.objectContaining({
+        status: 'RESOLVED',
+        resolvedByAI: true,
+        resolvedAt: expect.any(Date),
+        assigneeId: 'ai-agent-id',
+        category: 'TECHNICAL_QUESTION',
+      }),
+    });
+  });
+});
+
+describe('ticketEnums normalization', () => {
+  test('invalid AI categories normalize to valid Prisma enum values', async () => {
+    const { normalizeCategory, normalizePriority } = await import('../utils/ticketEnums');
+    expect(normalizeCategory('Technical')).toBe('TECHNICAL_QUESTION');
+    expect(normalizeCategory('technical')).toBe('TECHNICAL_QUESTION');
+    expect(normalizeCategory('technical_question')).toBe('TECHNICAL_QUESTION');
+    expect(normalizeCategory('TECHNICAL-QUESTION')).toBe('TECHNICAL_QUESTION');
+    expect(normalizeCategory('refund')).toBe('REFUND_REQUEST');
+    expect(normalizeCategory('Refund Request')).toBe('REFUND_REQUEST');
+    expect(normalizeCategory('general')).toBe('GENERAL_QUESTION');
+    expect(normalizeCategory('completely unknown gibberish')).toBe('GENERAL_QUESTION');
+    expect(normalizeCategory(null)).toBe('GENERAL_QUESTION');
+    expect(normalizeCategory('')).toBe('GENERAL_QUESTION');
+    expect(normalizePriority('high')).toBe('HIGH');
+    expect(normalizePriority('URGENT')).toBe('URGENT');
+    expect(normalizePriority('critical')).toBe('URGENT');
+    expect(normalizePriority('nonsense')).toBe('MEDIUM');
+    expect(normalizePriority(undefined)).toBe('MEDIUM');
   });
 });
 
@@ -330,17 +405,20 @@ describe('sendAutoResponse — AI agent assignment', () => {
     expect(prismaMock.reply.create).not.toHaveBeenCalled();
   });
 
-  test('email send failure → no assignment, no resolution', async () => {
+  test('email send failure → AI still assigned and ticket RESOLVED (delivery retried separately)', async () => {
     kbFindMatchMock.mockReturnValue(KB_ENTRY);
     resolveAIMock.mockResolvedValue(GOOD_DECISION);
     sendEmailMock.mockResolvedValue({ emailId: null, error: 'down', attempts: 3 });
 
     await callSendAutoResponse();
 
-    for (const call of prismaMock.ticket.update.mock.calls) {
-      expect(call[0].data.status).not.toBe('RESOLVED');
-      expect(call[0].data.assigneeId).toBeUndefined();
-    }
+    // Spec: email delivery failure must not roll back AI assignment or the
+    // resolved state — the outbound row is retried by the delivery worker.
+    const resolved = prismaMock.ticket.update.mock.calls.find(
+      (c: any[]) => c[0]?.data?.status === 'RESOLVED'
+    );
+    expect(resolved).toBeDefined();
+    expect(resolved[0].data.assigneeId).toBe('ai-agent-id');
   });
 });
 

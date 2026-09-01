@@ -367,14 +367,20 @@ export default function TicketsPage() {
         // email From header at creation time and preserved in the DB), so show
         // it first and only fall back to the reporter User's name.
         (row as any).senderName ?? (row as any).user_Ticket_reporterIdTouser?.name,
-      cell: ({ getValue }) => {
-        const val = getValue() as string;
+      cell: ({ getValue, row }) => {
+        // Never truncate the sender to a single character: show the full name
+        // (or the email address as fallback) and let the column keep enough
+        // width. The avatar keeps only the initial by design.
+        const val =
+          (getValue() as string) ||
+          (row.original as any)?.senderEmail ||
+          '';
         return (
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 text-xs font-bold">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 text-xs font-bold flex-shrink-0">
               {val?.charAt(0).toUpperCase()}
             </div>
-            <span className="text-sm font-medium">{val}</span>
+            <span className="text-sm font-medium whitespace-nowrap">{val}</span>
           </div>
         );
       }

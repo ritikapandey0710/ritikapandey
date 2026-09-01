@@ -96,18 +96,33 @@ export async function sendEmailWithRetry(
 
   for (let attempt = 1; attempt <= MAX_SEND_ATTEMPTS; attempt++) {
     try {
+      // Translate EMAIL headers into the corresponding Resend API BODY fields.
+      // Previously these were forwarded as HTTP request headers, which Resend
+      // ignores — meaning threading (In-Reply-To/References) never worked and
+      // there was no Reply-To, so customer replies went to the bare
+      // onboarding@resend.dev sender instead of the support inbox.
+      const inReplyTo = headers?.['In-Reply-To'];
+      const references = headers?.['References'];
+      const replyTo =
+        headers?.['Reply-To'] ??
+        process.env.EMAIL_REPLY_TO ??
+        process.env.EMAIL_IMAP_USER ??
+        undefined;
+
       const response = await fetch(RESEND_API_URL, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
-          ...(headers ?? {}),
         },
         body: JSON.stringify({
           from: getEmailFrom(),
           to,
           subject,
           html,
+          ...(replyTo ? { reply_to: replyTo } : {}),
+          ...(inReplyTo ? { in_reply_to: inReplyTo } : {}),
+          ...(references ? { references } : {}),
         }),
       });
 

@@ -7,6 +7,7 @@ import { sendEmailWithRetry } from './resend.service';
 import { knowledgeBaseService, type KnowledgeBaseEntry } from './knowledgeBaseService';
 import { resolveTicketWithAI, type AIResolutionDecision, type TicketAnalysisDecision } from '../controllers/ai.controller';
 import { getOrCreateAIAgent } from './aiAgentService';
+import { normalizeCategory } from '../utils/ticketEnums';
 import { captureServerError } from '../lib/sentry';
 
 interface EmailOptions {
@@ -703,17 +704,21 @@ export class EmailService {
       // the AI's classification intact.
       if (!canResolve) {
         try {
+          const normalizedCategory = decision?.category
+            ? normalizeCategory(decision.category)
+            : aiDecision?.category
+              ? normalizeCategory(aiDecision.category)
+              : undefined;
           await prisma.ticket.update({
             where: { id: ticketId },
             data: {
               status: 'OPEN',
               assigneeId: null,
-              ...(decision?.category
-                ? { category: decision.category as any }
-                : aiDecision?.category
-                  ? { category: aiDecision.category as any }
-                  : {}),
-              ...(aiDecision ? { priority: (aiDecision.confidence >= 0.8 ? 'LOW' : 'MEDIUM') as any } : {}),
+              // Only write a category when the AI actually produced one, and
+              // only a value valid for the Prisma enum. Priority is NOT derived
+              // from AI confidence — the ticket keeps the priority assigned at
+              // creation (keyword heuristic / future AI priority field).
+              ...(normalizedCategory ? { category: normalizedCategory as any } : {}),
             },
           });
         } catch (err) {
@@ -740,6 +745,11 @@ export class EmailService {
           ? `${lastEmail.references} ${wrapped}`
           : wrapped;
       }
+      // Route customer replies back to the support inbox (Gmail), not to the
+      // bare onboarding@resend.dev sender. sendEmailWithRetry maps this to the
+      // Resend `reply_to` body field.
+      headers['Reply-To'] =
+        process.env.EMAIL_REPLY_TO ?? process.env.EMAIL_IMAP_USER ?? '';
 
       // Record QUEUED with a full snapshot for the delivery worker.
       const pendingMessageId = `pending-autoresponse-${ticketId}`;
@@ -787,42 +797,6 @@ export class EmailService {
           console.error(`Failed to mark auto-response EmailMessage SENT for ticket ${ticketId}:`, err);
         });
         console.log(`Auto-response sent via Resend for ticket ${ticketId} (email id: ${result.emailId})`);
-
-        // If we have a confident AI resolution, save the AI reply and mark ticket as RESOLVED
-        // This happens AFTER sending email so ticket resolution depends on successful delivery
-        if (canResolve) {
-          try {
-            const aiAgent = await getOrCreateAIAgent();
-            await prisma.reply.create({
-              data: {
-                body: [decision?.solution, decision?.verification]
-                  .filter((s) => s && s.trim().length > 0)
-                  .join('\n\n'),
-                ticketId: ticketId,
-                authorId: aiAgent.id,
-                senderType: 'AGENT',
-              },
-            });
-
-            // Update ticket status
-            await prisma.ticket.update({
-              where: { id: ticketId },
-              data: {
-                status: 'RESOLVED',
-                resolvedByAI: true,
-                resolvedAt: new Date(),
-                assigneeId: aiAgent.id,
-                // Update category based on AI's suggestion
-                category: (decision?.category || aiDecision?.category) as any,
-              },
-            });
-
-            console.log(`Ticket ${ticketId} resolved by AI`);
-          } catch (dbError) {
-            // Never crash email ingestion on reply/status persistence issues.
-            console.error(`Failed to get AI agent or update ticket for ticket ${ticketId}:`, dbError);
-          }
-        }
       }
 
       if (!result.emailId) {
@@ -838,6 +812,52 @@ export class EmailService {
           }).catch((err) => {
             console.error(`Failed to mark auto-response EmailMessage FAILED for ticket ${ticketId}:`, err);
           });
+        }
+      }
+
+      // If we have a confident AI resolution, save the AI reply and mark ticket
+      // as RESOLVED. This happens AFTER the send attempt, but INDEPENDENT of the
+      // send outcome: the AI solution belongs in the ticket conversation and the
+      // ticket state must not stay PROCESSING just because Resend hiccuped (the
+      // QUEUED/FAILED outbound row remains for the delivery worker to retry).
+      if (canResolve) {
+        try {
+          const aiAgent = await getOrCreateAIAgent();
+          // Use the ACTUAL AI result that produced the emailed solution. The
+          // resolution may have come from the KB path (decision) OR the general
+          // analysis path (aiDecision) — previously only `decision` was read,
+          // which produced an empty Reply body for analysis-path resolutions.
+          const solutionText = [decision?.solution ?? aiDecision?.solution, decision?.verification ?? aiDecision?.verification]
+            .filter((s) => s && s.trim().length > 0)
+            .join('\n\n');
+          await prisma.reply.create({
+            data: {
+              body: solutionText,
+              ticketId: ticketId,
+              authorId: aiAgent.id,
+              senderType: 'AGENT',
+            },
+          });
+
+          // Update ticket status. Category must be a valid Prisma enum value —
+          // an invalid AI category previously caused PrismaClientValidationError
+          // which silently aborted this whole block (ticket stuck in PROCESSING).
+          const aiCategory = decision?.category ?? aiDecision?.category;
+          await prisma.ticket.update({
+            where: { id: ticketId },
+            data: {
+              status: 'RESOLVED',
+              resolvedByAI: true,
+              resolvedAt: new Date(),
+              assigneeId: aiAgent.id,
+              ...(aiCategory ? { category: normalizeCategory(aiCategory) as any } : {}),
+            },
+          });
+
+          console.log(`Ticket ${ticketId} resolved by AI`);
+        } catch (dbError) {
+          // Never crash email ingestion on reply/status persistence issues.
+          console.error(`Failed to get AI agent or update ticket for ticket ${ticketId}:`, dbError);
         }
       }
     } catch (error) {
