@@ -11,7 +11,21 @@ const MAX_SEND_ATTEMPTS = 3;
  * Falls back to the default Resend onboarding address if EMAIL_FROM is not set.
  */
 export function getEmailFrom(): string {
-  return process.env.EMAIL_FROM || DEFAULT_FROM;
+  const configured = process.env.EMAIL_FROM;
+  if (configured) {
+    // Normalize: trim and strip any matching surrounding quotes (e.g. a value
+    // pasted as "Name <email@example.com>" with literal quotes into a config
+    // / env var, which Resend's from-field format validation would otherwise reject).
+    const trimmed = configured.trim();;
+    if (
+      trimmed.length >= 2 &&
+      ((trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+        (trimmed.startsWith("'") && trimmed.endsWith("'")))) {
+      return trimmed.slice(1, -1).trim();
+    }
+    return trimmed;;
+  }
+  return DEFAULT_FROM;;
 }
 
 export interface SendEmailAttempt {
