@@ -1,0 +1,11 @@
+-- Make EmailMessage.ticketId nullable so the inbox-processing flow can create
+-- a placeholder row (for duplicate prevention / atomic ownership) BEFORE the
+-- ticket exists. The Prisma schema already declares ticketId as nullable
+-- (`ticketId String?`), but migration 20260823120001_add_email_message_threading
+-- originally created the column as NOT NULL and no later migration made it
+-- nullable. That schema/migration drift caused a P2011 NullConstraintViolation
+-- when the email service tried to insert a placeholder row with ticketId = null.
+--
+-- This is a non-destructive, metadata-only change (drops a NOT NULL constraint).
+-- Existing rows are untouched; they always had a valid ticketId.
+ALTER TABLE "EmailMessage" ALTER COLUMN "ticketId" DROP NOT NULL;

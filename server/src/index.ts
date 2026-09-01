@@ -112,6 +112,16 @@ app.get("/api/test", (_req: Request, res: Response) => {
   res.json({ message: "Test endpoint working" });
 });
 
+// Health endpoints: quick JSON probes for uptime/readiness checks.
+// These are intentionally defined BEFORE the static/SPA fallback so they
+// return JSON instead of the frontend index.html.
+app.get("/api/health", (_req: Request, res: Response) => {
+  res.json({ status: "ok" });
+});
+app.get("/health", (_req: Request, res: Response) => {
+  res.json({ status: "ok" });
+});
+
 // Authentication middleware for ticket routes
 app.use("/api/tickets", async (req: Request, res: Response, next: NextFunction) => {
   try {
