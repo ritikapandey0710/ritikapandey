@@ -363,7 +363,10 @@ export default function TicketsPage() {
       header: 'Sender',
       enableSorting: true,
       accessorFn: (row) =>
-        (row as any).user_Ticket_reporterIdTouser?.name ?? (row as any).senderName,
+        // The ticket's senderName is authoritative (taken directly from the
+        // email From header at creation time and preserved in the DB), so show
+        // it first and only fall back to the reporter User's name.
+        (row as any).senderName ?? (row as any).user_Ticket_reporterIdTouser?.name,
       cell: ({ getValue }) => {
         const val = getValue() as string;
         return (
@@ -432,6 +435,18 @@ export default function TicketsPage() {
       cell: ({ getValue }) => {
         const assignedTo = getValue() as string | null;
         if (!assignedTo) return <span className="text-xs text-slate-500 italic">—</span>;
+
+        // Clearly distinguish the AI agent from human agents so the UI never
+        // hides that AI is handling a ticket.
+        if (assignedTo.trim().toUpperCase() === 'AI') {
+          return (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-violet-100 text-violet-700 text-xs font-semibold">
+              <span aria-hidden="true">🤖</span>
+              AI
+            </span>
+          );
+        }
+
         return (
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 text-xs font-bold">

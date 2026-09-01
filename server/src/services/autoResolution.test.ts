@@ -52,6 +52,7 @@ import {
   EmailService,
   buildSolutionEmail,
   buildFallbackEmail,
+  buildAcknowledgementEmail,
   AI_RESOLUTION_CONFIDENCE_THRESHOLD,
 } from './email.service';
 import { processNewTicket } from './ticketProcessing.service';
@@ -268,6 +269,30 @@ describe('processNewTicket — existing behaviour preserved', () => {
 
 // ── Issue 1: AI-resolved tickets are assigned to the existing AI agent ────
 
+describe('buildAcknowledgementEmail — immediate acknowledgement (Problem E)', () => {
+  test('greets the sender by first name and never promises human follow-up', () => {
+    const html = buildAcknowledgementEmail('Ritika Pandey', 'Wi-Fi connection issue');
+    expect(html).toContain('Hello Ritika,');
+    expect(html).toContain('Wi-Fi connection issue');
+    expect(html).toContain('analyzing the issue');
+    expect(html.toLowerCase()).not.toContain('requires further assistance');
+    expect(html.toLowerCase()).not.toContain('support agent will follow up');
+    expect(html.toLowerCase()).not.toContain('agent will follow up');
+  });
+
+  test('falls back to a generic greeting when no sender name is available', () => {
+    const html = buildAcknowledgementEmail();
+    expect(html).toContain('Hello,');
+    expect(html).not.toContain('Hello undefined');
+  });
+
+  test('escapes user-provided name/subject in the acknowledgement', () => {
+    const html = buildAcknowledgementEmail('<script>x</script>', '<b>Wi-Fi</b>');
+    expect(html).not.toContain('<script>x</script>');
+    expect(html).not.toContain('<b>Wi-Fi</b>');
+  });
+});
+
 describe('sendAutoResponse — AI agent assignment', () => {
   test('AI-resolved ticket gets assigneeId = existing AI agent, resolvedByAI, RESOLVED', async () => {
     kbFindMatchMock.mockReturnValue(KB_ENTRY);
@@ -299,7 +324,9 @@ describe('sendAutoResponse — AI agent assignment', () => {
 
     const data = prismaMock.ticket.update.mock.calls[0]?.[0]?.data;
     expect(data?.status).not.toBe('RESOLVED');
-    expect(data?.assigneeId).toBeUndefined();
+    // The ticket must NOT be marked as resolved nor assigned to AI; it is
+    // unassigned (assigneeId null) so it is visible to human agents.
+    expect(data?.assigneeId).toBeNull();
     expect(prismaMock.reply.create).not.toHaveBeenCalled();
   });
 

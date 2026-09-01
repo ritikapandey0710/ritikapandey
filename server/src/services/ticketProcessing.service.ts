@@ -307,6 +307,15 @@ if (!skipAutoResolve) {
         .catch((error) => {
           // Log the original AI text-generation error for debugging
           console.error(`AI classification failed for ticket ${ticket.id}`, error);
+          // In the email-ingestion flow (skipAutoResolve === true) the ticket's
+          // status/assignee are owned by the asynchronous AI solution step
+          // (sendAutoResponse / scheduleAISolution). A transient Gemini failure
+          // during classification must NOT yank the ticket out of PROCESSING or
+          // unassign the AI agent before that step has had a chance to run.
+          if (skipAutoResolve) {
+            // Leave status/assignee untouched so sendAutoResponse can handle it.
+            return;
+          }
           // If the AI text generation threw, do not leave the ticket stuck in its
           // processing/AI state. Reset ONLY the status to OPEN and unassign from AI
           // (all other fields are left untouched) so it is visible to human agents.

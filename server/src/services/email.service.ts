@@ -42,9 +42,9 @@ export const AI_RESOLUTION_CONFIDENCE_THRESHOLD = 0.85;
 /** Escape user/AI-provided text for safe embedding in an HTML email body. */
 function escapeHtml(text: string): string {
   return text
-    .replace(/&/g, '&')
-    .replace(/</g, '<')
-    .replace(/>/g, '>');
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 /** Convert plain-text paragraphs into simple HTML blocks for email bodies. */
@@ -120,6 +120,36 @@ export function buildFallbackEmail(): string {
     '<p style="color:#333;font-size:15px;line-height:1.6;">Thank you for contacting Help Desk Support.</p>',
     '<p style="color:#333;font-size:15px;line-height:1.6;">We have reviewed your request, and it requires further assistance from our support team. A support agent will follow up with you as soon as possible.</p>',
     '<p style="color:#333;font-size:15px;line-height:1.6;">In the meantime, if you have any additional details that may help us assist you, please reply to this email.</p>',
+    '<p style="color:#333;font-size:15px;">Best regards,<br/>Help Desk Support</p>',
+    '</div>',
+  ].join('\n');
+}
+
+/**
+ * Build the immediate "we received your request" acknowledgement email.
+ *
+ * This is sent right after a new ticket is created from an inbound email. It is
+ * deliberately short and makes NO claim about human follow-up — it only confirms
+ * receipt and says the (AI) support system is analyzing the issue. The AI
+ * solution (or, where AI cannot confidently solve it, the support hand-off) is
+ * sent shortly afterward by the asynchronous solution step.
+ */
+export function buildAcknowledgementEmail(
+  senderName?: string,
+  subject?: string
+): string {
+  const greeting = senderName && senderName.trim().length > 0
+    ? `Hello ${escapeHtml(senderName.trim().split(/\s+/)[0])},`
+    : 'Hello,';
+  const topic =
+    subject && subject.trim().length > 0
+      ? ` regarding <strong>${escapeHtml(subject.trim())}</strong>`
+      : '';
+  return [
+    '<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">',
+    `<p style="color:#333;font-size:16px;">${greeting}</p>`,
+    `<p style="color:#333;font-size:15px;line-height:1.6;">We received your support request${topic}.</p>`,
+    '<p style="color:#333;font-size:15px;line-height:1.6;">Our support system is analyzing the issue and preparing a solution for you. You should receive a solution shortly.</p>',
     '<p style="color:#333;font-size:15px;">Best regards,<br/>Help Desk Support</p>',
     '</div>',
   ].join('\n');
@@ -505,6 +535,17 @@ export class EmailService {
     });
 
     if (existingUser) {
+      // Keep the user's display name in sync with the (full) name carried by
+      // the email From header. The ticket's senderName is authoritative, but
+      // the reporter User (used by the API/UI as a lookup) should also reflect
+      // the full name rather than a stale/short value from a previous message.
+      const normalizedName = name && name.trim().length > 0 ? name.trim() : null;
+      if (normalizedName && !existingUser.name) {
+        await prisma.user.update({
+          where: { id: existingUser.id },
+          data: { name: normalizedName },
+        });
+      }
       return existingUser.id;
     }
 
@@ -656,7 +697,10 @@ export class EmailService {
         html = buildFallbackEmail();
       }
 
-      // If AI cannot resolve, mark ticket as OPEN and unassign AI agent
+      // If AI cannot resolve, mark ticket as OPEN and unassign AI agent.
+      // Persist any category/priority the AI determined so those fields are
+      // not left blank (Problem C): the ticket is routed to a human agent with
+      // the AI's classification intact.
       if (!canResolve) {
         try {
           await prisma.ticket.update({
@@ -664,6 +708,12 @@ export class EmailService {
             data: {
               status: 'OPEN',
               assigneeId: null,
+              ...(decision?.category
+                ? { category: decision.category as any }
+                : aiDecision?.category
+                  ? { category: aiDecision.category as any }
+                  : {}),
+              ...(aiDecision ? { priority: (aiDecision.confidence >= 0.8 ? 'LOW' : 'MEDIUM') as any } : {}),
             },
           });
         } catch (err) {
@@ -794,6 +844,125 @@ export class EmailService {
       // Never propagate into inbound email processing.
       console.error('Failed to send auto-response:', error);
     }
+  }
+
+  /**
+   * Send the immediate acknowledgement to the sender of a newly created
+   * inbound ticket. This is the FIRST customer-facing email and is sent right
+   * after ticket creation so the customer knows their request was received.
+   *
+   * Unlike the (older) auto-response fallback, the acknowledgement makes NO
+   * claim that a human agent will follow up — it only confirms receipt and says
+   * the ticket is being analyzed. The AI solution (or hand-off) is sent
+   * separately by the asynchronous solution step.
+   *
+   * Best-effort: never throws into the inbound processing path.
+   */
+  private async sendAcknowledgement(
+    to: string,
+    subject: string,
+    ticketId: string,
+    senderName?: string
+  ): Promise<void> {
+    try {
+      if (!process.env.RESEND_API_KEY) {
+        console.log('RESEND_API_KEY not configured, skipping acknowledgement email');
+        return;
+      }
+
+      const html = buildAcknowledgementEmail(senderName, subject);
+      const emailSubject = `Re: ${subject}`;
+
+      // Record QUEUED OUTBOUND row (threads onto the ticket) so the delivery
+      // worker can retry if Resend fails. Distinct messageId from the AI
+      // solution row to avoid unique-constraint collisions.
+      const pendingMessageId = `pending-ack-${ticketId}`;
+      let outboundRowId: string | null = null;
+      try {
+        const existing = await prisma.emailMessage.findUnique({
+          where: { messageId: pendingMessageId },
+          select: { id: true },
+        });
+        if (existing) {
+          outboundRowId = existing.id;
+        } else {
+          const queued = await prisma.emailMessage.create({
+            data: {
+              messageId: pendingMessageId,
+              ticketId,
+              direction: 'OUTBOUND',
+              deliveryStatus: 'QUEUED',
+              toAddress: to,
+              subject: emailSubject,
+              bodyHtml: html,
+            },
+          });
+          outboundRowId = queued.id;
+        }
+      } catch (error) {
+        console.error(`Failed to record QUEUED acknowledgement EmailMessage for ticket ${ticketId}:`, error);
+      }
+
+      const result = await sendEmailWithRetry(to, emailSubject, html);
+
+      if (result.emailId && outboundRowId) {
+        await prisma.emailMessage.update({
+          where: { id: outboundRowId },
+          data: {
+            messageId: result.emailId,
+            deliveryStatus: 'SENT',
+            lastError: null,
+            retryCount: result.attempts,
+          },
+        }).catch((err) => {
+          console.error(`Failed to mark acknowledgement EmailMessage SENT for ticket ${ticketId}:`, err);
+        });
+        console.log(`Acknowledgement sent via Resend for ticket ${ticketId} (email id: ${result.emailId})`);
+      } else if (outboundRowId) {
+        await prisma.emailMessage.update({
+          where: { id: outboundRowId },
+          data: {
+            deliveryStatus: 'FAILED',
+            lastError: result.error ?? 'Resend unavailable or failed',
+            retryCount: result.attempts,
+          },
+        }).catch((err) => {
+          console.error(`Failed to mark acknowledgement EmailMessage FAILED for ticket ${ticketId}:`, err);
+        });
+        console.error(`Failed to send acknowledgement for ticket ${ticketId}: ${result.error ?? 'unknown error'}`);
+      }
+    } catch (error) {
+      // Never propagate into inbound email processing.
+      console.error('Failed to send acknowledgement:', error);
+    }
+  }
+
+  /** Guards against scheduling overlapping AI-solution runs for the same ticket. */
+  private activeSolutionTickets = new Set<string>();
+
+  /**
+   * Defer the AI solution step so email polling is NOT blocked on Gemini /
+   * Resend latency. The acknowledgement is sent first (in-line), then this
+   * schedules the solution (or human hand-off) to run on the next tick,
+   * allowing other incoming emails to be processed without waiting.
+   */
+  private scheduleAISolution(
+    to: string,
+    subject: string,
+    ticketId: string
+  ): void {
+    if (this.activeSolutionTickets.has(ticketId)) return;
+    this.activeSolutionTickets.add(ticketId);
+
+    setTimeout(async () => {
+      try {
+        await this.sendAutoResponse(to, subject, ticketId);
+      } catch (error) {
+        console.error(`Async AI solution step failed for ticket ${ticketId}:`, error);
+      } finally {
+        this.activeSolutionTickets.delete(ticketId);
+      }
+    }, 0);
   }
 
   /**
@@ -1211,8 +1380,12 @@ export class EmailService {
           placeholderUpdated = true;
         }
 
-        // Send auto-response only for newly created tickets
-        await this.sendAutoResponse(senderEmail, parsedEmail.subject, ticket!.id);
+        // Immediate acknowledgement (fast, in-line, non-blocking-ish single
+        // Resend call) so the customer knows their request was received. The
+        // AI solution (or human hand-off) is then scheduled asynchronously so
+        // email polling is not blocked while Gemini analyzes the ticket.
+        await this.sendAcknowledgement(senderEmail, parsedEmail.subject, ticket!.id, senderName);
+        this.scheduleAISolution(senderEmail, parsedEmail.subject, ticket!.id);
       }
 
       // Mark email as seen
