@@ -40,6 +40,45 @@ interface EmailOptions {
  */
 export const AI_RESOLUTION_CONFIDENCE_THRESHOLD = 0.85;
 
+/** Total AI analysis attempts per ticket (1 initial + 2 retries). */
+const AI_RETRY_ATTEMPTS = 3;
+
+const aiRetrySleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Run an AI operation with a small retry budget and exponential backoff.
+ *
+ * Gemini occasionally returns transient HTTP 503 ("high demand") errors.
+ * Previously a single thrown error was swallowed by sendAutoResponse, which
+ * then sent the generic "requires further assistance" fallback — falsely
+ * implying the AI had reviewed the request. Retrying 2 extra times with short
+ * backoff converts most transient failures into successful analyses.
+ *
+ * The error is re-thrown after the final attempt so the caller can
+ * distinguish "AI unavailable" from "AI answered canResolve=false".
+ */
+async function withAIRetry<T>(
+  operation: string,
+  fn: () => Promise<T>
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= AI_RETRY_ATTEMPTS; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      console.error(
+        `[sendAutoResponse] ${operation} attempt ${attempt}/${AI_RETRY_ATTEMPTS} failed:`,
+        error
+      );
+      if (attempt < AI_RETRY_ATTEMPTS) {
+        await aiRetrySleep(1000 * attempt); // 1s, 2s
+      }
+    }
+  }
+  throw lastError;
+}
+
 /** Escape user/AI-provided text for safe embedding in an HTML email body. */
 function escapeHtml(text: string): string {
   return text
@@ -436,6 +475,13 @@ export class EmailService {
    *   1. In-Reply-To  -> stored messageId
    *   2. References   -> any stored messageId
    *   3. Gmail thread ID
+   *   4. Normalized subject (SAFE fallback, sender-guarded)
+   *
+   * Note on outbound Message-IDs: the Resend send API returns only its opaque
+   * email ID (no RFC Message-ID), so we cannot store the customer-visible
+   * RFC Message-ID for outbound mails. When the customer's Gmail reply carries
+   * an In-Reply-To we don't recognize, the sender-guarded normalized-subject
+   * fallback below keeps the reply attached to the right ticket.
    */
   private async findThreadMatch(
     email: ParsedEmail
@@ -477,7 +523,61 @@ export class EmailService {
       }
     }
 
+    // 4. Normalized subject fallback (SAFE). Only reached when all header /
+    // thread-id matches failed. Guards against randomly attaching unrelated
+    // tickets:
+    //   - subject must normalize-equal an existing OUTBOUND email on a ticket
+    //     (customer replies arrive as "Re: <original subject>"),
+    //   - the inbound sender address must equal the ticket's original sender,
+    //   - only the last 30 days of outbound mail are considered.
+    const normalizedSubject = this.normalizeSubject(email.subject);
+    const senderAddress = email.from?.[0]?.address?.toLowerCase().trim();
+    if (normalizedSubject.length > 0 && senderAddress) {
+      const candidates = await prisma.emailMessage.findMany({
+        where: {
+          ticketId: { not: null },
+          direction: 'OUTBOUND',
+          subject: { not: null },
+          createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 200,
+        select: { ticketId: true, subject: true },
+      });
+      const subjectMatch = candidates.find(
+        (c) => this.normalizeSubject(c.subject ?? undefined) === normalizedSubject
+      );
+      if (subjectMatch?.ticketId) {
+        const ticket = await prisma.ticket.findUnique({
+          where: { id: subjectMatch.ticketId },
+          select: { senderEmail: true },
+        });
+        if (
+          ticket?.senderEmail &&
+          ticket.senderEmail.toLowerCase().trim() === senderAddress
+        ) {
+          return subjectMatch.ticketId;
+        }
+      }
+    }
+
     return null;
+  }
+
+  /**
+   * Normalize an email subject for threading comparison: strip repeated
+   * reply/forward prefixes ("Re:", "Fwd:", "Fw:"), lowercase, collapse
+   * whitespace, trim.
+   */
+  private normalizeSubject(subject?: string | null): string {
+    if (!subject) return '';
+    let s = String(subject).toLowerCase().replace(/\s+/g, ' ').trim();
+    let previous: string;
+    do {
+      previous = s;
+      s = s.replace(/^(re|fwd?|aw|tr)\s*:\s*/, '').trim();
+    } while (s !== previous);
+    return s;
   }
 
   /**
@@ -644,6 +744,10 @@ export class EmailService {
       // ── Knowledge base match + AI verification ─────────────────────
       let html: string | null = null;
       let canResolve = false;
+      // True when the AI analysis THREW (Gemini 503 / network / quota) even
+      // after retries. A thrown error must NEVER be interpreted as
+      // canResolve=false — the AI never actually reviewed the request.
+      let aiFailed = false;
       let kbEntry: KnowledgeBaseEntry | null = null;
       let decision: AIResolutionDecision | null = null;
       let aiDecision: TicketAnalysisDecision | null = null;
@@ -654,7 +758,9 @@ export class EmailService {
         kbEntry = knowledgeBaseService.findMatchingEntry(title, description);
         console.log(`[sendAutoResponse] Knowledge base result:`, kbEntry ? `found: ${kbEntry.title}` : 'null');
         if (kbEntry) {
-          decision = await resolveTicketWithAI(title, description, kbEntry);
+          decision = await withAIRetry('resolveTicketWithAI', () =>
+            resolveTicketWithAI(title, description, kbEntry as KnowledgeBaseEntry)
+          );
           if (
             decision.canResolve &&
             decision.confidence >= AI_RESOLUTION_CONFIDENCE_THRESHOLD &&
@@ -669,7 +775,9 @@ export class EmailService {
         if (!canResolve) {
           console.log(`[sendAutoResponse] About to call analyzeTicketWithAI (dynamic import)`);
           const { analyzeTicketWithAI } = await import('../controllers/ai.controller');
-          aiDecision = await analyzeTicketWithAI(title, description);
+          aiDecision = await withAIRetry('analyzeTicketWithAI', () =>
+            analyzeTicketWithAI(title, description)
+          );
           console.log(`[sendAutoResponse] analyzeTicketWithAI returned:`, aiDecision);
 
           if (
@@ -681,9 +789,10 @@ export class EmailService {
           }
         }
       } catch (aiError) {
-        // Gemini failure / timeout / quota error: log safely, keep the
-        // ticket OPEN, and never crash email ingestion. Sentry only observes
-        // (no behavior change); safe context tags only — no ticket bodies.
+        // Gemini failure / timeout / quota error after all retries: log safely
+        // and NEVER crash email ingestion. Sentry only observes (no behavior
+        // change); safe context tags only — no ticket bodies.
+        aiFailed = true;
         console.error(`AI auto-resolution check failed for ticket ${ticketId}:`, aiError);
         captureServerError(aiError, {
           service: "ai",
@@ -692,9 +801,21 @@ export class EmailService {
         });
       }
 
+      if (!html && aiFailed) {
+        // The AI never produced a decision (transient outage persisted through
+        // all retries). Sending the generic fallback here would falsely claim
+        // "we have reviewed your request". Instead: send NOTHING further,
+        // keep the ticket in its current state (OPEN) with any classification
+        // / AI assignment already persisted, and let a human agent handle it.
+        console.error(
+          `[sendAutoResponse] AI analysis unavailable after ${AI_RETRY_ATTEMPTS} attempts for ticket ${ticketId}; NOT sending fallback email — ticket remains OPEN for a human agent.`
+        );
+        return;
+      }
+
       if (!html) {
-        // No reliable knowledge-base or AI solution — send the professional
-        // fallback. The ticket intentionally stays OPEN.
+        // AI explicitly answered (no exception) but could not confidently
+        // resolve — ONLY in this case is the generic fallback appropriate.
         html = buildFallbackEmail();
       }
 

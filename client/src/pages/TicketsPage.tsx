@@ -380,7 +380,7 @@ export default function TicketsPage() {
             <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 text-xs font-bold flex-shrink-0">
               {val?.charAt(0).toUpperCase()}
             </div>
-            <span className="text-sm font-medium whitespace-nowrap">{val}</span>
+            <span className="text-sm font-medium whitespace-nowrap text-slate-900 dark:text-slate-900">{val}</span>
           </div>
         );
       }

@@ -135,6 +135,12 @@ export async function sendEmailWithRetry(
       }
 
       if (response.ok) {
+        // NOTE: the Resend send API returns only its opaque email ID
+        // (parsed.id) — it does NOT expose the RFC Message-ID that
+        // recipients see in their mail client. Nothing more can be stored
+        // here; customer-reply threading relies on In-Reply-To/References
+        // of previously received inbound mail plus the sender-guarded
+        // normalized-subject fallback in EmailService.findThreadMatch.
         console.log(`Email sent via Resend: ${parsed?.id} (attempt ${attempt})`);
         return { emailId: parsed?.id ?? null, attempts: attempt };
       }

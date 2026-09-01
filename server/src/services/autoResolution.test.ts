@@ -175,6 +175,14 @@ describe('sendAutoResponse — AI knowledge-base auto-resolution', () => {
 
   test('no knowledge-base match → fallback sent, ticket stays OPEN', async () => {
     kbFindMatchMock.mockReturnValue(null);
+    // The general AI analysis explicitly answers (no exception) but cannot resolve.
+    analyzeAIMock.mockResolvedValue({
+      canResolve: false,
+      confidence: 0.2,
+      category: 'General',
+      solution: '',
+      reason: 'Needs human investigation',
+    });
     sendEmailMock.mockResolvedValue({ emailId: 'resend-email-2', attempts: 1 });
 
     await callSendAutoResponse();
@@ -188,6 +196,14 @@ describe('sendAutoResponse — AI knowledge-base auto-resolution', () => {
   test('low-confidence AI (< threshold) → fallback sent, ticket stays OPEN', async () => {
     kbFindMatchMock.mockReturnValue(KB_ENTRY);
     resolveAIMock.mockResolvedValue({ ...GOOD_DECISION, confidence: 0.5 });
+    // The follow-up general AI analysis also explicitly declines to resolve.
+    analyzeAIMock.mockResolvedValue({
+      canResolve: false,
+      confidence: 0.3,
+      category: 'General',
+      solution: '',
+      reason: 'Needs human investigation',
+    });
     sendEmailMock.mockResolvedValue({ emailId: 'resend-email-3', attempts: 1 });
 
     await callSendAutoResponse();
@@ -200,14 +216,22 @@ describe('sendAutoResponse — AI knowledge-base auto-resolution', () => {
 });
 
 describe('sendAutoResponse — failure handling', () => {
-  test('Gemini throws → logged safely, fallback sent, ticket stays OPEN, no crash', async () => {
+  test('Gemini throws persistently → retried, NO misleading fallback, ticket untouched, no crash', async () => {
     kbFindMatchMock.mockReturnValue(KB_ENTRY);
     resolveAIMock.mockRejectedValue(new Error('Gemini API error: quota exceeded'));
+    analyzeAIMock.mockRejectedValue(new Error('Gemini API error: high demand (503)'));
     sendEmailMock.mockResolvedValue({ emailId: 'resend-email-4', attempts: 1 });
 
     await callSendAutoResponse(); // must not throw
 
-    expect((sendEmailMock.mock.calls[0][2] as string)).toContain('requires further assistance');
+    // A thrown Gemini error is NEVER interpreted as canResolve=false:
+    // the KB-path AI call is retried 3 times, but no email is sent at all —
+    // neither the solution nor the generic "we have reviewed your request"
+    // fallback — and the ticket is left untouched for a human agent.
+    expect(resolveAIMock).toHaveBeenCalledTimes(3);
+    // The KB call threw, so the general-analysis call is never reached.
+    expect(analyzeAIMock).not.toHaveBeenCalled();
+    expect(sendEmailMock).not.toHaveBeenCalled();
     expect(resolvedUpdateCalls().length).toBe(0);
     expect(prismaMock.reply.create).not.toHaveBeenCalled();
   });
@@ -393,16 +417,28 @@ describe('sendAutoResponse — AI agent assignment', () => {
   test('failed AI resolution does NOT assign or resolve the ticket', async () => {
     kbFindMatchMock.mockReturnValue(KB_ENTRY);
     resolveAIMock.mockRejectedValue(new Error('Gemini down'));
+    // The follow-up general analysis also explicitly declines (no exception).
+    analyzeAIMock.mockResolvedValue({
+      canResolve: false,
+      confidence: 0.2,
+      category: 'General',
+      solution: '',
+      reason: 'Needs human investigation',
+    });
     sendEmailMock.mockResolvedValue({ emailId: 'resend-email-11', attempts: 1 });
 
     await callSendAutoResponse();
 
-    const data = prismaMock.ticket.update.mock.calls[0]?.[0]?.data;
-    expect(data?.status).not.toBe('RESOLVED');
-    // The ticket must NOT be marked as resolved nor assigned to AI; it is
-    // unassigned (assigneeId null) so it is visible to human agents.
-    expect(data?.assigneeId).toBeNull();
+    // With the AI unavailable (persistent throw), nothing is sent and the
+    // ticket state is preserved as-is: no RESOLVED update, no OPEN/unassign
+    // update, no reply, no email.
+    const resolved = prismaMock.ticket.update.mock.calls.find(
+      (c: any[]) => c[0]?.data?.status === 'RESOLVED'
+    );
+    expect(resolved).toBeUndefined();
+    expect(prismaMock.ticket.update).not.toHaveBeenCalled();
     expect(prismaMock.reply.create).not.toHaveBeenCalled();
+    expect(sendEmailMock).not.toHaveBeenCalled();
   });
 
   test('email send failure → AI still assigned and ticket RESOLVED (delivery retried separately)', async () => {
