@@ -1,0 +1,27 @@
+[1mdiff --git a/server/src/services/resend.service.ts b/server/src/services/resend.service.ts[m
+[1mindex 12c86c2..4c3bdd9 100644[m
+[1m--- a/server/src/services/resend.service.ts[m
+[1m+++ b/server/src/services/resend.service.ts[m
+[36m@@ -11,7 +11,21 @@[m [mconst MAX_SEND_ATTEMPTS = 3;[m
+  * Falls back to the default Resend onboarding address if EMAIL_FROM is not set.[m
+  */[m
+ export function getEmailFrom(): string {[m
+[31m-  return process.env.EMAIL_FROM || DEFAULT_FROM;[m
+[32m+[m[32m  const configured = process.env.EMAIL_FROM;[m
+[32m+[m[32m  if (configured) {[m
+[32m+[m[32m    // Normalize: trim and strip any matching surrounding quotes (e.g. a value[m
+[32m+[m[32m    // pasted as "Name <email@example.com>" with literal quotes into a config[m
+[32m+[m[32m    // / env var, which Resend's from-field format validation would otherwise reject).[m
+[32m+[m[32m    const trimmed = configured.trim();;[m
+[32m+[m[32m    if ([m
+[32m+[m[32m      trimmed.length >= 2 &&[m
+[32m+[m[32m      ((trimmed.startsWith('"') && trimmed.endsWith('"')) ||[m
+[32m+[m[32m        (trimmed.startsWith("'") && trimmed.endsWith("'")))) {[m
+[32m+[m[32m      return trimmed.slice(1, -1).trim();[m
+[32m+[m[32m    }[m
+[32m+[m[32m    return trimmed;;[m
+[32m+[m[32m  }[m
+[32m+[m[32m  return DEFAULT_FROM;;[m
+ }[m
+ [m
+ export interface SendEmailAttempt {[m

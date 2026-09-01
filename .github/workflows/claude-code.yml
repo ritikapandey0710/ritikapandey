@@ -1,52 +1,42 @@
 name: Claude Code
 
-# Controls when the workflow will run
+# Responds to @claude mentions on issues, PRs, and reviews.
+# Triggers on issue_comment/pull_request events run from the DEFAULT branch,
+# so this file must be on main for @claude to work.
 on:
-  workflow_dispatch:
-    inputs:
-      prompt:
-        description: 'Prompt for Claude Code to execute'
-        required: true
-        default: 'Analyze the repository and suggest improvements'
-      model:
-        description: 'Claude model to use'
-        required: false
-        default: 'claude-opus-5'
-      max_tokens:
-        description: 'Maximum tokens for response'
-        required: false
-        default: '8192'
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  issues:
+    types: [opened, assigned]
+  pull_request_review:
+    types: [submitted]
 
 jobs:
-  claude-code:
+  claude:
+    if: |
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
+      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       pull-requests: write
       issues: write
+      id-token: write
+      actions: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-      
-      - name: Install dependencies
-        run: npm ci
-      
-      - name: Install Claude Code
-        run: npm install -g @anthropic-ai/claude-code
-      
+          fetch-depth: 1
+
       - name: Run Claude Code
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.CLAUDE_SETUP_TOKEN }}
-        run: |
-          claude-code \
-            --model "${{ inputs.model }}" \
-            --max-tokens "${{ inputs.max_tokens }}" \
-            "${{ inputs.prompt }}"
+        uses: anthropics/claude-code-action@v1
+        with:
+          # Uses the Claude GitHub App identity + subscription-based auth.
+          # No ANTHROPIC_API_KEY required.
+          claude_args: |
+            --max-turns 50
