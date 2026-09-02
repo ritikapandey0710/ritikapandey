@@ -88,7 +88,7 @@ jobs:
           # Never echo the key. Config references the env var by name only.
           cat > /tmp/litellm-config.yaml <<EOF
           model_list:
-            - model_name: nim-codestral
+            - model_name: claude-sonnet-5
               litellm_params:
                 model: nvidia_nim/${NIM_MODEL}
                 api_key: os.environ/NVIDIA_NIM_API_KEY
@@ -117,14 +117,36 @@ jobs:
       - name: Prisma generate (baseline)
         run: bun run prisma:generate
 
+      - name: Diagnose and verify Claude -> LiteLLM routing
+        # Safe diagnostics only; never prints any secret/API key.
+        run: |
+          echo "=== Claude CLI version ==="
+          claude --version
+          echo ""
+          echo "=== Claude-facing model ==="
+          echo "ANTHROPIC_MODEL=sonnet"
+          echo "ANTHROPIC_SMALL_FAST_MODEL=sonnet"
+          echo ""
+          echo "=== LiteLLM health ==="
+          curl -sf http://127.0.0.1:4000/health/liveliness && echo "LiteLLM is UP" || (echo "LiteLLM NOT reachable"; cat /tmp/litellm.log; exit 1)
+          echo ""
+          echo "=== LiteLLM /v1/models (should include claude-sonnet-5) ==="
+          curl -s http://127.0.0.1:4000/v1/models
+          echo ""
+          if curl -s http://127.0.0.1:4000/v1/models | grep -q "claude-sonnet-5"; then
+            echo "OK: LiteLLM exposes claude-sonnet-5"
+          else
+            echo "ERROR: claude-sonnet-5 not exposed by LiteLLM"; cat /tmp/litellm.log; exit 1
+          fi
+
       - name: Run Claude to inspect and solve the issue
         env:
           # Point Claude Code CLI at the local LiteLLM proxy (NVIDIA NIM backend).
           # No Anthropic API key is used or required anywhere in this workflow.
           ANTHROPIC_BASE_URL: http://127.0.0.1:4000
           ANTHROPIC_AUTH_TOKEN: local-proxy-key
-          ANTHROPIC_MODEL: nim-codestral
-          ANTHROPIC_SMALL_FAST_MODEL: nim-codestral
+          ANTHROPIC_MODEL: sonnet
+          ANTHROPIC_SMALL_FAST_MODEL: sonnet
           DISABLE_TELEMETRY: "1"
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
           CLAUDE_CODE_DISABLE_THINKING: "1"
@@ -153,27 +175,8 @@ jobs:
           EOF
           cat /tmp/claude-task.md >> /tmp/claude-instructions.md
 
-          # Claude Code modelPicker with behavesAs: register the custom LiteLLM
-          # model alias (nim-codestral) with Sonnet-class behavior so the
-          # client-side catalog validation accepts it. The actual inference still
-          # flows through LiteLLM to NVIDIA NIM.
-          cat > /tmp/claude-settings.json <<'EOF'
-          {
-            "modelPicker": {
-              "options": [
-                {
-                  "model": "nim-codestral",
-                  "label": "NVIDIA NIM Codestral",
-                  "behavesAs": "sonnet"
-                }
-              ]
-            }
-          }
-          EOF
-
           claude --version
           claude -p "$(cat /tmp/claude-instructions.md)" \
-            --settings /tmp/claude-settings.json \
             --max-turns 60 \
             --dangerously-skip-permissions \
             --verbose > /tmp/claude-output.txt 2>&1 || {
