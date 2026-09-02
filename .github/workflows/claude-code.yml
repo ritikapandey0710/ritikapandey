@@ -88,7 +88,7 @@ jobs:
           # Never echo the key. Config references the env var by name only.
           cat > /tmp/litellm-config.yaml <<EOF
           model_list:
-            - model_name: claude-sonnet-5
+            - model_name: nim-codestral
               litellm_params:
                 model: nvidia_nim/${NIM_MODEL}
                 api_key: os.environ/NVIDIA_NIM_API_KEY
@@ -123,10 +123,11 @@ jobs:
           # No Anthropic API key is used or required anywhere in this workflow.
           ANTHROPIC_BASE_URL: http://127.0.0.1:4000
           ANTHROPIC_AUTH_TOKEN: local-proxy-key
-          ANTHROPIC_MODEL: sonnet
-          ANTHROPIC_SMALL_FAST_MODEL: sonnet
+          ANTHROPIC_MODEL: nim-codestral
+          ANTHROPIC_SMALL_FAST_MODEL: nim-codestral
           DISABLE_TELEMETRY: "1"
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
+          CLAUDE_CODE_DISABLE_THINKING: "1"
         run: |
           cat > /tmp/claude-instructions.md <<'EOF'
           You are solving a GitHub issue for the Help Desk repository.
