@@ -166,3 +166,15 @@ With `SENTRY_DSN` configured in `server/.env`, start the server (`bun run dev`) 
 
 ### Production deployment requirements
 Set `SENTRY_DSN` + `SENTRY_ENVIRONMENT=production` on the server, and build the client with `VITE_SENTRY_DSN` present. Optional source-map upload: install `@sentry/vite-plugin`, add it to `vite.config.ts` with `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT` from CI secrets � deliberately not enabled here to keep the build simple.
+
+## AUTOMATION PROTECTION (Claude GitHub automation)
+
+When Claude automation (@claude in GitHub issues) makes changes, the following are STRICTLY PROTECTED and must never be modified:
+
+- **Resend email architecture** (Resend API integration, `resend` usage in server/client)
+- **Gmail/IMAP email architecture** (imap/imap-simple/mailparser/nodemailer flows)
+- **Railway deployment configuration** (`railway.json`, `railway.toml`, `RAILWAY_DEPLOYMENT.md`)
+- **Docker deployment configuration** (`Dockerfile`)
+- **Any unrelated working functionality** not required to solve the requested issue
+
+The automation must: never push to `main` directly; always create a branch `claude/issue-<n>` and a Pull Request; run validation (prisma generate, client build, client tests, server typecheck) before committing.

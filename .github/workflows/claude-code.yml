@@ -1,8 +1,11 @@
-name: Claude Code
+name: Claude (NVIDIA NIM)
 
-# Responds to @claude mentions on issues, PRs, and reviews.
-# Triggers on issue_comment/pull_request events run from the DEFAULT branch,
-# so this file must be on main for @claude to work.
+# Responds to "@claude solve it" comments on Issues/PRs.
+# Chain: comment -> this workflow -> Claude Code CLI -> LiteLLM proxy (localhost,
+# Anthropic /v1/messages -> OpenAI translation) -> NVIDIA NIM API.
+# NOTE: issue_comment workflows only run when this file is on the DEFAULT branch (main).
+# Only the authorized user below may trigger the privileged automation.
+
 on:
   issue_comment:
     types: [created]
@@ -10,33 +13,219 @@ on:
     types: [created]
   issues:
     types: [opened, assigned]
-  pull_request_review:
-    types: [submitted]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+env:
+  # Model served behind the proxy. Override in repo Variables as NIM_MODEL.
+  # MUST be a NVIDIA NIM model that supports tool/function calling.
+  NIM_MODEL: ${{ vars.NIM_MODEL || 'meta/llama-3.3-70b-instruct' }}
+  AUTHORIZED_ACTOR: ritikapandey0710
 
 jobs:
   claude:
     if: |
       (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
       (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
       (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-      issues: write
-      id-token: write
-      actions: read
     steps:
+      # ---------- SECURITY GATE: only authorized user ----------
+      - name: Authorize actor
+        run: |
+          echo "Actor: ${{ github.actor }}"
+          if [ "${{ github.actor }}" != "${AUTHORIZED_ACTOR}" ]; then
+            echo "::error::User '${{ github.actor }}' is not authorized to trigger Claude automation."
+            exit 1
+          fi
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
 
-      - name: Run Claude Code
-        uses: anthropics/claude-code-action@v1
+      - name: Collect issue context
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "## Repository issue/PR"
+            echo "Number: #${{ github.event.issue.number }}"
+            echo "Title: ${{ github.event.issue.title }}"
+            echo ""
+            echo "## Body"
+            echo "${{ github.event.issue.body }}"
+            echo ""
+            echo "## Triggering comment"
+            if [ "${{ github.event_name }}" = "issues" ]; then
+              echo "(triggered by issue creation)"
+            else
+              echo "${{ github.event.comment.body }}"
+            fi
+            echo ""
+            echo "## All comments"
+            gh api "repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/comments" \
+              --paginate --jq '.[] | "### " + .user.login + ":\n" + .body'
+          } > /tmp/claude-task.md
+          wc -l /tmp/claude-task.md
+
+      # ---------- NVIDIA NIM backend via LiteLLM proxy ----------
+      - name: Setup Python (for LiteLLM proxy)
+        uses: actions/setup-python@v5
         with:
-          # Uses the Claude GitHub App identity + subscription-based auth.
-          # No ANTHROPIC_API_KEY required.
-          claude_args: |
-            --max-turns 50
+          python-version: "3.12"
+
+      - name: Install LiteLLM proxy
+        run: pip install "litellm[proxy]"
+
+      - name: Start LiteLLM proxy (Anthropic format -> NVIDIA NIM)
+        env:
+          NVIDIA_NIM_API_KEY: ${{ secrets.NVIDIA_NIM_API_KEY }}
+        run: |
+          # Never echo the key. Config references the env var by name only.
+          cat > /tmp/litellm-config.yaml <<EOF
+          model_list:
+            - model_name: nim
+              litellm_params:
+                model: nvidia_nim/${NIM_MODEL}
+                api_key: os.environ/NVIDIA_NIM_API_KEY
+          litellm_settings:
+            drop_params: true
+          EOF
+          nohup litellm --config /tmp/litellm-config.yaml --port 4000 --host 127.0.0.1 > /tmp/litellm.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:4000/health/liveliness > /dev/null; then
+              echo "LiteLLM proxy is up"; break
+            fi
+            sleep 2
+          done
+          curl -s http://127.0.0.1:4000/health/liveliness || (cat /tmp/litellm.log && exit 1)
+
+      # ---------- Claude Code CLI ----------
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Prisma generate (baseline)
+        run: bun run prisma:generate
+
+      - name: Run Claude to inspect and solve the issue
+        env:
+          # Point Claude Code CLI at the local LiteLLM proxy (NVIDIA NIM backend).
+          # No Anthropic API key is used or required anywhere in this workflow.
+          ANTHROPIC_BASE_URL: http://127.0.0.1:4000
+          ANTHROPIC_AUTH_TOKEN: local-proxy-key
+          ANTHROPIC_MODEL: nim
+          ANTHROPIC_SMALL_FAST_MODEL: nim
+          DISABLE_TELEMETRY: "1"
+          CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
+        run: |
+          cat > /tmp/claude-instructions.md <<'EOF'
+          You are solving a GitHub issue for the Help Desk repository.
+
+          STRICT RULES:
+          1. Read and follow CLAUDE.md at the repository root.
+          2. NEVER modify: the Resend email architecture, the Gmail/IMAP email
+             architecture, Railway configuration (railway.json, railway.toml,
+             RAILWAY_DEPLOYMENT.md), the Dockerfile, or any unrelated working
+             functionality.
+          3. First inspect the repository thoroughly before making any change.
+          4. Make the MINIMAL change required to solve the issue.
+          5. After changes, run validation:
+             - bun run prisma:generate
+             - bun run --cwd client build   (typecheck + build)
+             - bun run --cwd client test -- --run
+             - bun run --cwd server typecheck
+             Fix failures caused by your change.
+          6. Do NOT commit, push, create branches, or create PRs — the workflow does that.
+          7. Summarize at the end: what you changed and why.
+
+          The task:
+          EOF
+          cat /tmp/claude-task.md >> /tmp/claude-instructions.md
+          claude --version
+          claude -p "$(cat /tmp/claude-instructions.md)" \
+            --max-turns 60 \
+            --dangerously-skip-permissions \
+            --verbose > /tmp/claude-output.txt 2>&1 || {
+              echo "Claude run FAILED. Output:"; tail -100 /tmp/claude-output.txt; exit 1;
+            }
+          echo "--- Claude summary (last 80 lines) ---"
+          tail -80 /tmp/claude-output.txt
+
+      # ---------- Validation ----------
+      - name: Validate (prisma + client build + client tests + server typecheck)
+        run: |
+          bun run prisma:generate
+          bun run --cwd client build
+          bun run --cwd client test -- --run
+          bun run --cwd server typecheck
+
+      # ---------- Branch, commit, PR (never main) ----------
+      - name: Create branch and commit changes
+        id: commit
+        run: |
+          BRANCH="claude/issue-${{ github.event.issue.number }}"
+          git config user.name "claude-bot"
+          git config user.email "claude-bot@users.noreply.github.com"
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No changes produced by Claude."
+            exit 0
+          fi
+          git checkout -b "$BRANCH"
+          git add -A
+          git commit -m "claude: solve #${{ github.event.issue.number }}" \
+            -m "Automated fix generated by Claude Code CLI (NVIDIA NIM backend).
+          Triggered by @${AUTHORIZED_ACTOR}.
+
+          Closes #${{ github.event.issue.number }}"
+          git push origin "$BRANCH"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Create Pull Request
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr create \
+            --base main \
+            --head "${{ steps.commit.outputs.branch }}" \
+            --title "claude: solve #${{ github.event.issue.number }}" \
+            --body "## Automated fix for #${{ github.event.issue.number }}
+
+          Generated by **Claude Code CLI** with **NVIDIA NIM** as the model backend.
+          Triggered by @${{ github.actor }} via \`@claude solve it\`.
+
+          Validation performed:
+          - Prisma generate
+          - Client typecheck + build (tsc -b && vite build)
+          - Client tests (vitest)
+          - Server typecheck (tsc --noEmit)
+
+          Please review before merging. Main was not modified directly."
+
+      - name: Report no changes on issue
+        if: steps.commit.outputs.changed != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment "${{ github.event.issue.number }}" \
+            --body "Claude ran but produced no code changes. See workflow logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - name: Report failure on issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment "${{ github.event.issue.number }}" \
+            --body "Claude automation failed. Check logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" || true

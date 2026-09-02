@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "bun run --watch src/index.ts",
     "start": "bun run src/index.ts",
-    "seed": "bun run seed.ts"
+    "seed": "bun run seed.ts",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/bcryptjs": "2.4.6",
