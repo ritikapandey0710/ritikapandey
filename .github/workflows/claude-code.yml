@@ -153,13 +153,20 @@ jobs:
           EOF
           cat /tmp/claude-task.md >> /tmp/claude-instructions.md
 
-          # Claude Code 2.1.258 modelOverrides: map custom model name to a known
-          # model ID so the client-side catalog validation accepts it. The actual
-          # inference still flows through LiteLLM to NVIDIA NIM.
+          # Claude Code modelPicker with behavesAs: register the custom LiteLLM
+          # model alias (nim-codestral) with Sonnet-class behavior so the
+          # client-side catalog validation accepts it. The actual inference still
+          # flows through LiteLLM to NVIDIA NIM.
           cat > /tmp/claude-settings.json <<'EOF'
           {
-            "modelOverrides": {
-              "nim-codestral": "sonnet"
+            "modelPicker": {
+              "options": [
+                {
+                  "model": "nim-codestral",
+                  "label": "NVIDIA NIM Codestral",
+                  "behavesAs": "sonnet"
+                }
+              ]
             }
           }
           EOF
