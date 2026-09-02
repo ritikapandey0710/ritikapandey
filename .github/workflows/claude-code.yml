@@ -22,7 +22,7 @@ permissions:
 env:
   # Model served behind the proxy. Override in repo Variables as NIM_MODEL.
   # MUST be a NVIDIA NIM model that supports tool/function calling.
-  NIM_MODEL: ${{ vars.NIM_MODEL || 'meta/llama-3.3-70b-instruct' }}
+  NIM_MODEL: ${{ vars.NIM_MODEL || 'mistralai/codestral-22b-instruct-v0.1' }}
   AUTHORIZED_ACTOR: ritikapandey0710
 
 jobs:
@@ -88,7 +88,7 @@ jobs:
           # Never echo the key. Config references the env var by name only.
           cat > /tmp/litellm-config.yaml <<EOF
           model_list:
-            - model_name: nim
+            - model_name: claude-3-5-sonnet-20241022
               litellm_params:
                 model: nvidia_nim/${NIM_MODEL}
                 api_key: os.environ/NVIDIA_NIM_API_KEY
@@ -123,8 +123,8 @@ jobs:
           # No Anthropic API key is used or required anywhere in this workflow.
           ANTHROPIC_BASE_URL: http://127.0.0.1:4000
           ANTHROPIC_AUTH_TOKEN: local-proxy-key
-          ANTHROPIC_MODEL: nim
-          ANTHROPIC_SMALL_FAST_MODEL: nim
+          ANTHROPIC_MODEL: claude-3-5-sonnet-20241022
+          ANTHROPIC_SMALL_FAST_MODEL: claude-3-5-sonnet-20241022
           DISABLE_TELEMETRY: "1"
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
         run: |
