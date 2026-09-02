@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "bun run --watch src/index.ts",
     "start": "bun run src/index.ts",
-    "seed": "bun run seed.ts"
+    "seed": "bun run seed.ts",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/bcryptjs": "2.4.6",
@@ -31,6 +32,7 @@
     "dotenv": "^17.4.2",
     "express": "^4.19.2",
     "express-rate-limit": "^8.6.0",
+    "imap": "^0.8.19",
     "imap-simple": "^5.1.0",
     "mailparser": "^3.9.14",
     "nodemailer": "^9.0.3",
