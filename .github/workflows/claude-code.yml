@@ -88,7 +88,7 @@ jobs:
           # Never echo the key. Config references the env var by name only.
           cat > /tmp/litellm-config.yaml <<EOF
           model_list:
-            - model_name: sonnet
+            - model_name: claude-sonnet-5
               litellm_params:
                 model: nvidia_nim/${NIM_MODEL}
                 api_key: os.environ/NVIDIA_NIM_API_KEY
