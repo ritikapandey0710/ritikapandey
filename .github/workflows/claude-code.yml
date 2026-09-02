@@ -152,8 +152,21 @@ jobs:
           The task:
           EOF
           cat /tmp/claude-task.md >> /tmp/claude-instructions.md
+
+          # Claude Code 2.1.258 modelOverrides: map custom model name to a known
+          # model ID so the client-side catalog validation accepts it. The actual
+          # inference still flows through LiteLLM to NVIDIA NIM.
+          cat > /tmp/claude-settings.json <<'EOF'
+          {
+            "modelOverrides": {
+              "nim-codestral": "sonnet"
+            }
+          }
+          EOF
+
           claude --version
           claude -p "$(cat /tmp/claude-instructions.md)" \
+            --settings /tmp/claude-settings.json \
             --max-turns 60 \
             --dangerously-skip-permissions \
             --verbose > /tmp/claude-output.txt 2>&1 || {
