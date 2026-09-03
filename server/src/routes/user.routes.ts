@@ -32,7 +32,10 @@ router.get(
   authenticate,
   asyncHandler(async (_req, res) => {
     const users = await prisma.user.findMany({
-      where: { deletedAt: null },
+      where: {
+        deletedAt: null,
+        email: { not: "ap164920@gmail.com" }
+      },
       select: {
         id: true,
         name: true,
