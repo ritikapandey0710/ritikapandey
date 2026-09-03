@@ -102,7 +102,7 @@ describe('TicketsPage', () => {
     vi.mocked(fetchTickets).mockResolvedValue([]);
     renderPage();
     await screen.findByText('No tickets yet');
-    expect(screen.getByText("Click the 'New Ticket' button above to create your first ticket")).toBeInTheDocument();
+    expect(screen.getByText("Click 'New Ticket' to create your first ticket")).toBeInTheDocument();
   });
 
   it('shows error message on fetch failure', async () => {

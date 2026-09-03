@@ -717,7 +717,7 @@ export default function TicketsPage() {
                 </svg>
               </div>
               <p className="text-sm font-medium text-slate-900">No tickets yet</p>
-              <p className="text-xs text-slate-500 mt-1">Click the 'New Ticket' button above to create your first ticket</p>
+              <p className="text-xs text-slate-500 mt-1">Click 'New Ticket' to create your first ticket</p>
             </div>
           ) : noResults ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
