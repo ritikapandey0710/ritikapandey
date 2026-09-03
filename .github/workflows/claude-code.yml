@@ -94,6 +94,11 @@ jobs:
                 api_key: os.environ/NVIDIA_NIM_API_KEY
           litellm_settings:
             drop_params: true
+          general_settings:
+            # Local-only dummy key. Claude Code sends it via
+            # ANTHROPIC_AUTH_TOKEN (Authorization: Bearer local-proxy-key),
+            # so the proxy and the CLI use exactly the same credential.
+            master_key: local-proxy-key
           EOF
           nohup litellm --config /tmp/litellm-config.yaml --port 4000 --host 127.0.0.1 > /tmp/litellm.log 2>&1 &
           for i in $(seq 1 30); do
@@ -124,8 +129,8 @@ jobs:
           claude --version
           echo ""
           echo "=== Claude-facing model ==="
-          echo "ANTHROPIC_MODEL=sonnet"
-          echo "ANTHROPIC_SMALL_FAST_MODEL=sonnet"
+          echo "ANTHROPIC_MODEL=claude-sonnet-5"
+          echo "ANTHROPIC_SMALL_FAST_MODEL=claude-sonnet-5"
           echo ""
           echo "=== LiteLLM health ==="
           curl -sf http://127.0.0.1:4000/health/liveliness && echo "LiteLLM is UP" || (echo "LiteLLM NOT reachable"; cat /tmp/litellm.log; exit 1)
@@ -139,14 +144,58 @@ jobs:
             echo "ERROR: claude-sonnet-5 not exposed by LiteLLM"; cat /tmp/litellm.log; exit 1
           fi
 
+      - name: REAL end-to-end test of Claude -> LiteLLM -> NVIDIA NIM (/v1/messages)
+        # Sends the exact same kind of request Claude Code will send.
+        # NEVER prints NVIDIA_NIM_API_KEY or any secret value.
+        env:
+          NVIDIA_NIM_API_KEY: ${{ secrets.NVIDIA_NIM_API_KEY }}
+        run: |
+          response_file=$(mktemp)
+
+          status=$(curl -sS \
+            -o "$response_file" \
+            -w "%{http_code}" \
+            -X POST \
+            http://127.0.0.1:4000/v1/messages \
+            -H "Authorization: Bearer local-proxy-key" \
+            -H "x-api-key: local-proxy-key" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            --data '{
+              "model": "claude-sonnet-5",
+              "max_tokens": 16,
+              "messages": [
+                {
+                  "role": "user",
+                  "content": "Reply with OK"
+                }
+              ]
+            }')
+
+          echo "LiteLLM /v1/messages HTTP status: $status"
+          echo "LiteLLM response:"
+          # Error bodies from LiteLLM/NVIDIA never contain the API key, but
+          # redact just in case before printing.
+          sed -e "s/${NVIDIA_NIM_API_KEY:-__none__}/[REDACTED]/g" -e 's/nvapi-[A-Za-z0-9_-]*/[REDACTED]/g' "$response_file"
+
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+            echo "::error::LiteLLM -> NVIDIA NIM request FAILED (HTTP $status). See raw error above and /tmp/litellm.log."
+            echo "--- LiteLLM proxy log (tail) ---"
+            tail -60 /tmp/litellm.log
+            exit 1
+          fi
+          echo "SUCCESS: Claude model name -> LiteLLM -> NVIDIA NIM chain works."
+
+
+
       - name: Run Claude to inspect and solve the issue
         env:
           # Point Claude Code CLI at the local LiteLLM proxy (NVIDIA NIM backend).
           # No Anthropic API key is used or required anywhere in this workflow.
           ANTHROPIC_BASE_URL: http://127.0.0.1:4000
           ANTHROPIC_AUTH_TOKEN: local-proxy-key
-          ANTHROPIC_MODEL: sonnet
-          ANTHROPIC_SMALL_FAST_MODEL: sonnet
+          ANTHROPIC_MODEL: claude-sonnet-5
+          ANTHROPIC_SMALL_FAST_MODEL: claude-sonnet-5
           DISABLE_TELEMETRY: "1"
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
           CLAUDE_CODE_DISABLE_THINKING: "1"
